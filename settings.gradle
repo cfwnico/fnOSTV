@@ -1,0 +1,2 @@
+rootProject.name = "fnOSTV-Android4"
+include ":app"
