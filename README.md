@@ -46,12 +46,28 @@ scripts\setup-android-env.cmd
 scripts\build-debug.cmd
 ```
 
+生成 release APK：
+
+```powershell
+scripts\build-release.cmd
+```
+
 脚本会使用项目内 `.tooling` 目录中的 JDK 11、Gradle 6.7.1 和 Android SDK；`.tooling`、`local.properties`、构建产物均不会提交到 Git。
+
+首次执行 release 打包时会自动生成本地签名文件：
+
+```text
+signing\fnostv-release.jks
+keystore.properties
+```
+
+这两个文件已被 Git 忽略。请妥善备份，后续升级 APK 必须使用同一套签名。
 
 当前已验证生成：
 
 ```text
 app\build\outputs\apk\debug\app-debug.apk
+app\build\outputs\apk\release\app-release.apk
 ```
 
 ## 使用
