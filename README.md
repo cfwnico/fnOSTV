@@ -34,13 +34,25 @@ fnOSTV 是支持安卓 4 的旧版电视客户端。
 
 建议使用 Android Studio 4.2.x 或更高版本打开本目录，并安装 Android SDK Platform 28。
 
-命令行环境可执行：
+本仓库也提供 Windows 便携式构建脚本。首次准备环境：
 
 ```powershell
-gradle assembleDebug
+scripts\setup-android-env.cmd
 ```
 
-当前开发环境未安装 Java、Gradle 和 Android SDK，因此本机尚未生成 APK。
+生成 debug APK：
+
+```powershell
+scripts\build-debug.cmd
+```
+
+脚本会使用项目内 `.tooling` 目录中的 JDK 11、Gradle 6.7.1 和 Android SDK；`.tooling`、`local.properties`、构建产物均不会提交到 Git。
+
+当前已验证生成：
+
+```text
+app\build\outputs\apk\debug\app-debug.apk
+```
 
 ## 使用
 
