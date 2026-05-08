@@ -4,6 +4,10 @@ fnOSTV 是支持安卓 4 的旧版电视客户端。
 
 这是参考 `QiaoKes/fntv-electron` 思路实现的 Android 4.x 兼容版 fnOSTV 客户端。Electron 版本把飞牛影视 Web 端包成桌面应用，并加入服务器配置、账号状态、Cookie 保持、播放增强和本地代理等能力；Android 4 版本采用更轻的原生 WebView 外壳，以保证旧电视盒子和旧平板能启动。
 
+## 开源协议
+
+本项目采用 MIT License 开源，详见 [LICENSE](LICENSE)。开源使用、分发、贡献和发布要求见 [OPEN_SOURCE.md](OPEN_SOURCE.md)，项目声明见 [NOTICE](NOTICE)。
+
 ## 已实现
 
 - Android 原生 Java 工程，无 AndroidX、Kotlin、Compose 等现代运行时依赖。
