@@ -78,6 +78,34 @@ app\build\outputs\apk\release\app-release.apk
 4. 保存后进入 Web 端。
 5. 遥控器菜单键可重新打开设置页。
 
+## 本地模拟器调试
+
+准备 Android 4.4 x86 模拟器：
+
+```powershell
+scripts\setup-emulator.cmd
+```
+
+启动模拟器：
+
+```powershell
+scripts\start-emulator.cmd
+```
+
+安装并启动 debug 包：
+
+```powershell
+scripts\install-debug.cmd
+```
+
+查看应用相关日志：
+
+```powershell
+scripts\logcat-app.cmd
+```
+
+模拟器名称为 `fnostv_api19`，数据保存在项目内 `.tooling\avd`。
+
 ## Android 4 注意事项
 
 - Android 4 WebView 的内核较旧，飞牛 Web 端如果依赖非常新的 JavaScript、CSS 或 TLS 能力，可能需要服务端降级或使用 HTTP 内网访问。
