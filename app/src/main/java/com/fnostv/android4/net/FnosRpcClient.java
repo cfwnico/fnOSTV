@@ -121,6 +121,25 @@ public final class FnosRpcClient {
         return client.downloadUrlOnFileSocket(session, path);
     }
 
+    public List<FnosPlaybackSource> playbackSources(FnosSession session, FnosFileEntry entry) throws FnosRpcException {
+        if (entry == null) {
+            throw new FnosRpcException("播放文件为空");
+        }
+        String directUrl = entry.playbackUrl();
+        if (directUrl.length() > 0) {
+            List<FnosPlaybackSource> sources = new ArrayList<FnosPlaybackSource>();
+            sources.add(new FnosPlaybackSource("原画", directUrl));
+            return sources;
+        }
+        FnosRpcClient client = new FnosRpcClient(profile, deviceId, SOCKET_FILE);
+        return client.playbackSourcesOnFileSocket(session, entry);
+    }
+
+    public FnosFileList mediaCenterEntries(FnosSession session) throws FnosRpcException {
+        FnosRpcClient client = new FnosRpcClient(profile, deviceId, SOCKET_MAIN);
+        return client.mediaCenterEntriesOnMainSocket(session);
+    }
+
     public void close() {
         if (webSocket != null) {
             webSocket.close(1000, "done");
@@ -216,6 +235,71 @@ public final class FnosRpcClient {
         }
     }
 
+    private List<FnosPlaybackSource> playbackSourcesOnFileSocket(FnosSession session, FnosFileEntry entry) throws FnosRpcException {
+        if (entry.path.length() == 0) {
+            throw new FnosRpcException("文件路径为空");
+        }
+        connect();
+        try {
+            loadSessionId(false);
+            authenticateToken(session, false);
+            JSONObject request = new JSONObject();
+            request.put("req", "file.download");
+            request.put("files", new JSONArray().put(entry.path));
+            JSONObject response = send(signRequest(request, session.secretHex), REQUEST_TIMEOUT_SECONDS);
+            List<FnosPlaybackSource> sources = parsePlaybackSources(response);
+            if (sources.size() == 0) {
+                sources.add(new FnosPlaybackSource("原画", parseDownloadUrl(response)));
+            }
+            return sources;
+        } catch (JSONException ex) {
+            throw new FnosRpcException("构造播放源请求失败", ex);
+        } finally {
+            close();
+        }
+    }
+
+    private FnosFileList mediaCenterEntriesOnMainSocket(FnosSession session) throws FnosRpcException {
+        connect();
+        try {
+            loadSessionId(false);
+            authenticateToken(session, true);
+            String[] candidates = {
+                    "app.mediaCenter.home",
+                    "app.mediaCenter.index",
+                    "app.mediaCenter.list",
+                    "app.mediaCenter.recent",
+                    "mediaCenter.home",
+                    "mediaCenter.list"
+            };
+            FnosRpcException lastError = null;
+            for (int i = 0; i < candidates.length; i++) {
+                try {
+                    JSONObject request = new JSONObject();
+                    request.put("req", candidates[i]);
+                    JSONObject response = send(signRequest(request, session.secretHex), REQUEST_TIMEOUT_SECONDS);
+                    FnosFileList entries = parseMediaCenterList(response);
+                    if (entries.entries.size() > 0) {
+                        Logger.d("Media center API matched req=" + candidates[i]
+                                + " count=" + entries.entries.size());
+                        return entries;
+                    }
+                } catch (JSONException ex) {
+                    lastError = new FnosRpcException("构造影视中心请求失败", ex);
+                } catch (FnosRpcException ex) {
+                    lastError = ex;
+                    Logger.d("Media center API candidate failed: " + candidates[i] + " " + ex.getMessage());
+                }
+            }
+            if (lastError != null) {
+                throw lastError;
+            }
+            throw new FnosRpcException("影视中心接口未返回可用条目");
+        } finally {
+            close();
+        }
+    }
+
     private FnosFileList parseFileList(String path, String uid, JSONObject response) {
         List<FnosFileEntry> entries = new ArrayList<FnosFileEntry>();
         JSONArray files = response.optJSONArray("files");
@@ -253,6 +337,149 @@ public final class FnosRpcClient {
         throw new FnosRpcException("fnOS 未返回文件下载直链");
     }
 
+    private List<FnosPlaybackSource> parsePlaybackSources(JSONObject response) {
+        List<FnosPlaybackSource> sources = new ArrayList<FnosPlaybackSource>();
+        collectPlaybackSources(response, sources);
+        List<FnosPlaybackSource> unique = new ArrayList<FnosPlaybackSource>();
+        for (int i = 0; i < sources.size(); i++) {
+            FnosPlaybackSource source = sources.get(i);
+            if (source.isValid() && !containsSource(unique, source.url)) {
+                unique.add(source);
+            }
+        }
+        return unique;
+    }
+
+    private void collectPlaybackSources(Object value, List<FnosPlaybackSource> sources) {
+        if (value instanceof JSONObject) {
+            JSONObject object = (JSONObject) value;
+            String url = absoluteUrl(downloadCandidate(object));
+            if (url.length() > 0) {
+                sources.add(new FnosPlaybackSource(sourceLabel(object), url));
+            }
+            Iterator<String> keys = object.keys();
+            while (keys.hasNext()) {
+                Object child = object.opt(keys.next());
+                if (child instanceof JSONObject || child instanceof JSONArray) {
+                    collectPlaybackSources(child, sources);
+                }
+            }
+            return;
+        }
+        if (value instanceof JSONArray) {
+            JSONArray array = (JSONArray) value;
+            for (int i = 0; i < array.length(); i++) {
+                collectPlaybackSources(array.opt(i), sources);
+            }
+        }
+    }
+
+    private String sourceLabel(JSONObject object) {
+        String[] keys = {"quality", "resolution", "definition", "label", "name", "title", "type"};
+        for (int i = 0; i < keys.length; i++) {
+            String value = object.optString(keys[i]);
+            if (value != null && value.length() > 0 && !isHttpUrl(value)) {
+                return normalizeSourceLabel(value);
+            }
+        }
+        return "原画";
+    }
+
+    private String normalizeSourceLabel(String value) {
+        String lower = value.toLowerCase();
+        if (lower.indexOf("origin") >= 0 || lower.indexOf("source") >= 0 || lower.indexOf("raw") >= 0) {
+            return "原画";
+        }
+        if (lower.indexOf("1080") >= 0) {
+            return "1080p";
+        }
+        if (lower.indexOf("720") >= 0) {
+            return "720p";
+        }
+        if (lower.indexOf("480") >= 0) {
+            return "480p";
+        }
+        return value;
+    }
+
+    private boolean containsSource(List<FnosPlaybackSource> sources, String url) {
+        for (int i = 0; i < sources.size(); i++) {
+            if (sources.get(i).url.equals(url)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private FnosFileList parseMediaCenterList(JSONObject response) {
+        List<FnosFileEntry> entries = new ArrayList<FnosFileEntry>();
+        collectMediaEntries(response, entries);
+        return new FnosFileList("mediaCenter", entries);
+    }
+
+    private void collectMediaEntries(Object value, List<FnosFileEntry> entries) {
+        if (value instanceof JSONObject) {
+            JSONObject object = (JSONObject) value;
+            FnosFileEntry entry = mediaEntryFromJson(object);
+            if (entry != null && !containsEntry(entries, entry.path)) {
+                entries.add(entry);
+            }
+            Iterator<String> keys = object.keys();
+            while (keys.hasNext()) {
+                Object child = object.opt(keys.next());
+                if (child instanceof JSONObject || child instanceof JSONArray) {
+                    collectMediaEntries(child, entries);
+                }
+            }
+            return;
+        }
+        if (value instanceof JSONArray) {
+            JSONArray array = (JSONArray) value;
+            for (int i = 0; i < array.length(); i++) {
+                collectMediaEntries(array.opt(i), entries);
+            }
+        }
+    }
+
+    private FnosFileEntry mediaEntryFromJson(JSONObject object) {
+        String name = firstString(object, new String[]{"name", "title", "videoName", "movieName"});
+        String path = firstString(object, new String[]{"path", "filePath", "srcPath", "realPath"});
+        String url = absoluteUrl(downloadCandidate(object));
+        if (name.length() == 0 || (path.length() == 0 && url.length() == 0)) {
+            return null;
+        }
+        boolean directory = object.optInt("dir", 0) == 1
+                || object.optBoolean("dir")
+                || object.optBoolean("folder")
+                || object.optBoolean("isFolder");
+        return new FnosFileEntry(
+                name,
+                path.length() > 0 ? path : url,
+                directory,
+                object.optLong("size", 0L),
+                firstString(object, new String[]{"type", "mime", "mimeType"}),
+                url);
+    }
+
+    private String firstString(JSONObject object, String[] keys) {
+        for (int i = 0; i < keys.length; i++) {
+            String value = object.optString(keys[i]);
+            if (value != null && value.length() > 0) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private boolean containsEntry(List<FnosFileEntry> entries, String path) {
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i).path.equals(path)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private String downloadCandidate(JSONObject object) {
         String[] keys = {"url", "uri", "downloadUrl", "href", "link", "src", "location"};
         for (int i = 0; i < keys.length; i++) {
@@ -275,6 +502,10 @@ public final class FnosRpcClient {
             return origin(profile.baseUrl) + value;
         }
         return "";
+    }
+
+    private boolean isHttpUrl(String value) {
+        return value != null && (value.startsWith("http://") || value.startsWith("https://"));
     }
 
     private JSONObject loginPayload(String reqId) throws FnosRpcException {
