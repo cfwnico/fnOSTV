@@ -48,6 +48,8 @@ public final class FnosFileEntry {
                 || value.endsWith(".webm")
                 || value.endsWith(".mkv")
                 || value.endsWith(".avi")
+                || value.endsWith(".wmv")
+                || value.endsWith(".asf")
                 || value.endsWith(".ts")
                 || value.endsWith(".m2ts")
                 || value.endsWith(".flv");

@@ -183,7 +183,7 @@ public final class FnosRpcClient {
             loadSessionId(false);
             authenticateToken(session, false);
             JSONObject request = new JSONObject();
-            request.put("req", "file.lsDir");
+            request.put("req", "file.ls");
             if (path != null && path.length() > 0) {
                 request.put("path", path);
             }
@@ -254,7 +254,7 @@ public final class FnosRpcClient {
     }
 
     private String downloadCandidate(JSONObject object) {
-        String[] keys = {"url", "downloadUrl", "href", "link", "src", "location"};
+        String[] keys = {"url", "uri", "downloadUrl", "href", "link", "src", "location"};
         for (int i = 0; i < keys.length; i++) {
             String value = object.optString(keys[i]);
             if (value.length() > 0) {
