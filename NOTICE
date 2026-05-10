@@ -1,0 +1,11 @@
+fnOSTV Android 4
+Copyright (c) 2026 XDORG-N1
+
+This project is released under the MIT License. See LICENSE for the full terms.
+
+The implementation references the public design ideas of QiaoKes/fntv-electron:
+https://github.com/QiaoKes/fntv-electron
+
+This repository does not vendor Android SDK, Gradle, JDK, emulator system images,
+release signing keys, APK artifacts, or private service credentials. Local tools
+and generated files are kept out of source control through .gitignore.
