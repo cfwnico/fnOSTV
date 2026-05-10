@@ -22,6 +22,8 @@ import android.widget.TextView;
 
 import com.fnostv.android4.config.ProfileStore;
 import com.fnostv.android4.config.ServerProfile;
+import com.fnostv.android4.tv.RemoteActions;
+import com.fnostv.android4.tv.RemoteKeyHandler;
 import com.fnostv.android4.util.Constants;
 import com.fnostv.android4.web.FnosChromeClient;
 import com.fnostv.android4.web.FnosDownloadListener;
@@ -31,12 +33,13 @@ import com.fnostv.android4.web.LoginScript;
 import com.fnostv.android4.web.WebViewConfigurator;
 import com.fnostv.android4.web.WebViewEvents;
 
-public final class MainActivity extends Activity implements WebViewEvents {
+public final class MainActivity extends Activity implements WebViewEvents, RemoteActions {
     private FrameLayout root;
     private WebView webView;
     private ProgressBar progressBar;
     private TextView statusView;
     private FullscreenVideoController fullscreenVideoController;
+    private RemoteKeyHandler remoteKeyHandler;
     private ProfileStore store;
     private ServerProfile profile;
 
@@ -48,6 +51,7 @@ public final class MainActivity extends Activity implements WebViewEvents {
         store = new ProfileStore(this);
         CookieSyncManager.createInstance(this);
         buildLayout();
+        remoteKeyHandler = new RemoteKeyHandler(this);
         configureWebView();
         loadProfileOrSettings();
     }
@@ -84,22 +88,7 @@ public final class MainActivity extends Activity implements WebViewEvents {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS) {
-            openSettings();
-            return true;
-        }
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (fullscreenVideoController.isShowing()) {
-                fullscreenVideoController.hide();
-                return true;
-            }
-            if (webView.canGoBack()) {
-                webView.goBack();
-                return true;
-            }
-        }
-        if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == KeyEvent.KEYCODE_SPACE) {
-            webView.loadUrl("javascript:(function(){var v=document.querySelector('video');if(v){v.paused?v.play():v.pause();}})()");
+        if (remoteKeyHandler.onKeyDown(keyCode, event)) {
             return true;
         }
         return super.onKeyDown(keyCode, event);
@@ -153,8 +142,29 @@ public final class MainActivity extends Activity implements WebViewEvents {
         webView.loadUrl(profile.baseUrl);
     }
 
-    private void openSettings() {
+    @Override
+    public boolean openSettings() {
         startActivityForResult(new Intent(this, SettingsActivity.class), Constants.REQUEST_SETTINGS);
+        return true;
+    }
+
+    @Override
+    public boolean goBack() {
+        if (fullscreenVideoController.isShowing()) {
+            fullscreenVideoController.hide();
+            return true;
+        }
+        if (webView.canGoBack()) {
+            webView.goBack();
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean togglePlayback() {
+        webView.loadUrl("javascript:(function(){var v=document.querySelector('video');if(v){v.paused?v.play():v.pause();}})()");
+        return true;
     }
 
     private void showStatus(String message) {
