@@ -17,6 +17,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
+import okio.ByteString;
 
 public final class FnosRpcClient {
     private static final int OPEN_TIMEOUT_SECONDS = 10;
@@ -48,7 +49,11 @@ public final class FnosRpcClient {
 
     public void connect() throws FnosRpcException {
         openLatch = new CountDownLatch(1);
-        Request request = new Request.Builder().url(webSocketUrl(profile.baseUrl)).build();
+        Request request = new Request.Builder()
+                .url(webSocketUrl(profile.baseUrl))
+                .header("Origin", origin(profile.baseUrl))
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 4.4.2; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0 Safari/537.36")
+                .build();
         webSocket = httpClient.newWebSocket(request, new Listener());
         awaitOpen();
     }
@@ -57,23 +62,13 @@ public final class FnosRpcClient {
         connect();
         try {
             loadPublicKey();
-            JSONObject payload = loginPayload();
             String reqId = nextReqId();
-            try {
-                payload.put("reqid", reqId);
-            } catch (JSONException ex) {
-                throw new FnosRpcException("构造登录请求编号失败", ex);
-            }
+            JSONObject payload = loginPayload(reqId);
             JSONObject encrypted = encryptForLogin(payload);
-            try {
-                encrypted.put("reqid", reqId);
-            } catch (JSONException ex) {
-                throw new FnosRpcException("构造加密登录请求编号失败", ex);
-            }
             JSONObject response = sendEncrypted(reqId, encrypted, REQUEST_TIMEOUT_SECONDS);
             String secretHex = response.optString("secret");
             if (secretHex.length() > 0) {
-                secretHex = FnosCrypto.aesDecryptUtf8(secretHex, loginAesKey, loginIv);
+                secretHex = FnosCrypto.aesDecryptBase64ToBase64(secretHex, loginAesKey, loginIv);
             }
             FnosSession session = new FnosSession(
                     response.optString("token"),
@@ -149,13 +144,14 @@ public final class FnosRpcClient {
         }
     }
 
-    private JSONObject loginPayload() throws FnosRpcException {
+    private JSONObject loginPayload(String reqId) throws FnosRpcException {
         try {
             JSONObject request = new JSONObject();
+            request.put("reqid", reqId);
             request.put("req", "user.login");
             request.put("user", profile.username);
             request.put("password", profile.password);
-            request.put("stay", 0);
+            request.put("stay", false);
             request.put("deviceType", "Browser");
             request.put("deviceName", "Android-TV WebView");
             request.put("did", deviceId);
@@ -172,9 +168,9 @@ public final class FnosRpcClient {
             loginIv = FnosCrypto.randomBytes(16);
             JSONObject encrypted = new JSONObject();
             encrypted.put("req", "encrypted");
-            encrypted.put("iv", FnosCrypto.toHex(loginIv));
+            encrypted.put("iv", android.util.Base64.encodeToString(loginIv, android.util.Base64.NO_WRAP));
             encrypted.put("rsa", FnosCrypto.rsaEncryptBase64(publicKey, new String(loginAesKey, "UTF-8")));
-            encrypted.put("aes", FnosCrypto.aesEncryptHex(payload.toString(), loginAesKey, loginIv));
+            encrypted.put("aes", FnosCrypto.aesEncryptBase64(payload.toString(), loginAesKey, loginIv));
             return encrypted;
         } catch (Exception ex) {
             if (ex instanceof FnosRpcException) {
@@ -193,7 +189,7 @@ public final class FnosRpcClient {
             }
         }
         String body = request.toString();
-        return new SignedRequest(request.optString("reqid"), FnosCrypto.hmacSha256Hex(body, secretHex) + body);
+        return new SignedRequest(request.optString("reqid"), FnosCrypto.hmacSha256Base64(body, secretHex) + body);
     }
 
     private JSONObject send(JSONObject request, int timeoutSeconds) throws FnosRpcException {
@@ -229,6 +225,10 @@ public final class FnosRpcClient {
         synchronized (pendingCalls) {
             pendingCalls.put(reqId, call);
         }
+        Logger.d("RPC encrypted request reqid=" + reqId
+                + " iv=" + encrypted.optString("iv")
+                + " rsaLength=" + encrypted.optString("rsa").length()
+                + " aesLength=" + encrypted.optString("aes").length());
         webSocket.send(encrypted.toString());
         return call.await(reqId, timeoutSeconds);
     }
@@ -255,6 +255,11 @@ public final class FnosRpcClient {
             url = "ws://" + url.substring("http://".length());
         }
         return url + "/websocket?type=main";
+    }
+
+    private String origin(String baseUrl) {
+        int pathStart = baseUrl.indexOf('/', baseUrl.indexOf("://") + 3);
+        return pathStart > 0 ? baseUrl.substring(0, pathStart) : baseUrl;
     }
 
     private final class Listener extends WebSocketListener {
@@ -291,6 +296,11 @@ public final class FnosRpcClient {
             } catch (JSONException ex) {
                 Logger.w("RPC message parse failed: " + ex.getMessage());
             }
+        }
+
+        @Override
+        public void onMessage(WebSocket webSocket, ByteString bytes) {
+            Logger.d("RPC binary message bytes=" + bytes.size());
         }
 
         @Override

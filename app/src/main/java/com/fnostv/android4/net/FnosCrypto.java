@@ -54,55 +54,34 @@ final class FnosCrypto {
         }
     }
 
-    static String aesEncryptHex(String value, byte[] key, byte[] iv) throws FnosRpcException {
+    static String aesEncryptBase64(String value, byte[] key, byte[] iv) throws FnosRpcException {
         try {
             Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
             cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "AES"), new IvParameterSpec(iv));
-            return toHex(cipher.doFinal(value.getBytes("UTF-8")));
+            return Base64.encodeToString(cipher.doFinal(value.getBytes("UTF-8")), Base64.NO_WRAP);
         } catch (Exception ex) {
             throw new FnosRpcException("AES 加密失败", ex);
         }
     }
 
-    static String aesDecryptUtf8(String hexValue, byte[] key, byte[] iv) throws FnosRpcException {
+    static String aesDecryptBase64ToBase64(String base64Value, byte[] key, byte[] iv) throws FnosRpcException {
         try {
             Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
             cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"), new IvParameterSpec(iv));
-            return new String(cipher.doFinal(fromHex(hexValue)), "UTF-8");
+            byte[] decrypted = cipher.doFinal(Base64.decode(base64Value, Base64.DEFAULT));
+            return Base64.encodeToString(decrypted, Base64.NO_WRAP);
         } catch (Exception ex) {
             throw new FnosRpcException("AES 解密失败", ex);
         }
     }
 
-    static String hmacSha256Hex(String value, String keyHex) throws FnosRpcException {
+    static String hmacSha256Base64(String value, String keyBase64) throws FnosRpcException {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(fromHex(keyHex), "HmacSHA256"));
-            return toHex(mac.doFinal(value.getBytes("UTF-8")));
+            mac.init(new SecretKeySpec(Base64.decode(keyBase64, Base64.DEFAULT), "HmacSHA256"));
+            return Base64.encodeToString(mac.doFinal(value.getBytes("UTF-8")), Base64.NO_WRAP);
         } catch (Exception ex) {
             throw new FnosRpcException("请求签名失败", ex);
         }
-    }
-
-    static String toHex(byte[] bytes) {
-        StringBuilder builder = new StringBuilder(bytes.length * 2);
-        for (int i = 0; i < bytes.length; i++) {
-            int value = bytes[i] & 0xFF;
-            if (value < 16) {
-                builder.append('0');
-            }
-            builder.append(Integer.toHexString(value));
-        }
-        return builder.toString();
-    }
-
-    static byte[] fromHex(String hex) {
-        int length = hex.length();
-        byte[] data = new byte[length / 2];
-        for (int i = 0; i < length; i += 2) {
-            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-                    + Character.digit(hex.charAt(i + 1), 16));
-        }
-        return data;
     }
 }

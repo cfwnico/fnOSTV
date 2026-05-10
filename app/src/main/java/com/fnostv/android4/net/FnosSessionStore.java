@@ -8,11 +8,13 @@ import com.fnostv.android4.util.Constants;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.UUID;
+import java.security.SecureRandom;
 
 public final class FnosSessionStore {
     private static final String SESSION_KEY = "native_rpc_session";
     private static final String DEVICE_ID_KEY = "native_rpc_device_id";
+    private static final String DEVICE_ID_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz";
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final SharedPreferences preferences;
 
@@ -60,11 +62,36 @@ public final class FnosSessionStore {
 
     public String getOrCreateDeviceId() {
         String value = preferences.getString(DEVICE_ID_KEY, "");
-        if (value != null && value.length() > 0) {
+        if (isWebDeviceId(value)) {
             return value;
         }
-        value = UUID.randomUUID().toString();
+        value = createWebDeviceId();
         preferences.edit().putString(DEVICE_ID_KEY, value).apply();
         return value;
+    }
+
+    private boolean isWebDeviceId(String value) {
+        if (value == null) {
+            return false;
+        }
+        String[] parts = value.split("-");
+        return parts.length == 3
+                && parts[0].length() > 0
+                && parts[1].length() > 0
+                && parts[2].length() > 0;
+    }
+
+    private String createWebDeviceId() {
+        return Long.toString(System.currentTimeMillis(), 36)
+                + "-" + randomBase36(13)
+                + "-" + randomBase36(13);
+    }
+
+    private String randomBase36(int length) {
+        StringBuilder builder = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            builder.append(DEVICE_ID_CHARS.charAt(RANDOM.nextInt(DEVICE_ID_CHARS.length())));
+        }
+        return builder.toString();
     }
 }
