@@ -12,18 +12,17 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.webkit.CookieManager;
 import android.webkit.CookieSyncManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
-import android.widget.TextView;
 
 import com.fnostv.android4.config.ProfileStore;
 import com.fnostv.android4.config.ServerProfile;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
+import com.fnostv.android4.ui.StatusOverlay;
 import com.fnostv.android4.util.Constants;
 import com.fnostv.android4.web.FnosChromeClient;
 import com.fnostv.android4.web.FnosDownloadListener;
@@ -37,7 +36,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private FrameLayout root;
     private WebView webView;
     private ProgressBar progressBar;
-    private TextView statusView;
+    private StatusOverlay statusOverlay;
     private FullscreenVideoController fullscreenVideoController;
     private RemoteKeyHandler remoteKeyHandler;
     private ProfileStore store;
@@ -111,15 +110,8 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 Gravity.TOP);
         root.addView(progressBar, progressParams);
 
-        statusView = new TextView(this);
-        statusView.setTextColor(0xFFFFFFFF);
-        statusView.setTextSize(18);
-        statusView.setGravity(Gravity.CENTER);
-        statusView.setBackgroundColor(0xCC101820);
-        statusView.setVisibility(View.GONE);
-        root.addView(statusView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+        statusOverlay = new StatusOverlay(this);
+        root.addView(statusOverlay.getView(), StatusOverlay.layoutParams());
 
         setContentView(root);
     }
@@ -138,7 +130,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             openSettings();
             return;
         }
-        statusView.setVisibility(View.GONE);
+        statusOverlay.hide();
         webView.loadUrl(profile.baseUrl);
     }
 
@@ -168,8 +160,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     private void showStatus(String message) {
-        statusView.setText(message);
-        statusView.setVisibility(View.VISIBLE);
+        statusOverlay.show(message);
     }
 
     private void enterFullScreen() {
