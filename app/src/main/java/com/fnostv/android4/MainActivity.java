@@ -2,8 +2,10 @@ package com.fnostv.android4;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
@@ -33,6 +35,7 @@ import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
 import com.fnostv.android4.ui.NativeFileBrowserView;
 import com.fnostv.android4.ui.NativeHomeView;
+import com.fnostv.android4.ui.NativeVideoPlayerView;
 import com.fnostv.android4.ui.StatusOverlay;
 import com.fnostv.android4.util.Constants;
 import com.fnostv.android4.util.Logger;
@@ -44,11 +47,12 @@ import com.fnostv.android4.web.LoginScript;
 import com.fnostv.android4.web.WebViewConfigurator;
 import com.fnostv.android4.web.WebViewEvents;
 
-public final class MainActivity extends Activity implements WebViewEvents, RemoteActions, NativeHomeView.Listener, NativeFileBrowserView.Listener {
+public final class MainActivity extends Activity implements WebViewEvents, RemoteActions, NativeHomeView.Listener, NativeFileBrowserView.Listener, NativeVideoPlayerView.Listener {
     private FrameLayout root;
     private WebView webView;
     private NativeHomeView nativeHomeView;
     private NativeFileBrowserView fileBrowserView;
+    private NativeVideoPlayerView nativeVideoPlayerView;
     private ProgressBar progressBar;
     private StatusOverlay statusOverlay;
     private FullscreenVideoController fullscreenVideoController;
@@ -149,6 +153,10 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         root.addView(fileBrowserView.create(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        nativeVideoPlayerView = new NativeVideoPlayerView(this, this);
+        root.addView(nativeVideoPlayerView.create(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
@@ -174,6 +182,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         profile = store.load();
         nativeHomeView.hide();
         fileBrowserView.hide();
+        nativeVideoPlayerView.hide();
         if (!profile.isReady()) {
             showStatus("首次使用请配置飞牛服务地址");
             openSettings();
@@ -263,6 +272,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         statusOverlay.hide();
         webView.setVisibility(View.GONE);
         fileBrowserView.hide();
+        nativeVideoPlayerView.hide();
         nativeHomeView.show();
     }
 
@@ -289,11 +299,21 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             openFileBrowser(entry.path);
             return;
         }
-        showStatus("播放能力正在接入\n" + entry.name);
+        playFileEntry(entry);
+    }
+
+    @Override
+    public void onNativeVideoError(FnosFileEntry entry, String url) {
+        nativeVideoPlayerView.hide();
+        openExternalPlayer(entry, url, "内置播放器无法播放，正在尝试外部播放器");
     }
 
     @Override
     public boolean goBack() {
+        if (nativeVideoPlayerView.isVisible()) {
+            nativeVideoPlayerView.hide();
+            return true;
+        }
         if (fullscreenVideoController.isShowing()) {
             fullscreenVideoController.hide();
             return true;
@@ -315,6 +335,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     @Override
     public boolean togglePlayback() {
+        if (nativeVideoPlayerView.toggle()) {
+            return true;
+        }
         webView.loadUrl("javascript:(function(){var v=document.querySelector('video');if(v){v.paused?v.play():v.pause();}})()");
         return true;
     }
@@ -368,6 +391,37 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private String parentPath(String path) {
         int index = path == null ? -1 : path.lastIndexOf('/');
         return index > 0 ? path.substring(0, index) : "";
+    }
+
+    private void playFileEntry(FnosFileEntry entry) {
+        if (!entry.isVideo()) {
+            showStatus("暂不支持打开该文件\n" + entry.name);
+            return;
+        }
+        String url = entry.playbackUrl();
+        if (url.length() == 0) {
+            showStatus("已识别视频文件，但 fnOS 未返回播放直链\n后续将接入文件直链解析或本地代理\n" + entry.path);
+            return;
+        }
+        statusOverlay.hide();
+        nativeVideoPlayerView.play(entry, url);
+    }
+
+    private void openExternalPlayer(FnosFileEntry entry, String url, String fallbackMessage) {
+        if (url == null || url.length() == 0) {
+            showStatus(fallbackMessage + "\n但缺少可用播放地址");
+            return;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(Uri.parse(url), entry == null ? "video/*" : entry.mimeType());
+            startActivity(intent);
+        } catch (ActivityNotFoundException ex) {
+            showStatus(fallbackMessage + "\n未找到可播放该视频的外部应用");
+        } catch (RuntimeException ex) {
+            Logger.w("External player failed: " + ex.getMessage());
+            showStatus(fallbackMessage + "\n外部播放器启动失败");
+        }
     }
 
     private void enterFullScreen() {
