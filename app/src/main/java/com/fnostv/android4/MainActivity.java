@@ -20,6 +20,7 @@ import android.webkit.CookieSyncManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebView;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.Toast;
@@ -329,7 +330,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return;
         }
         if (NativeHomeView.ACTION_SEARCH.equals(action)) {
-            showStatus("搜索正在接入，当前可通过文件库浏览");
+            openSearchDialog();
             return;
         }
         if (NativeHomeView.ACTION_USER.equals(action)) {
@@ -508,6 +509,36 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         fileBrowserView.showCustom(title, entries.size() == 0 ? "暂无内容，先从影视大全或文件库播放/收藏媒体" : "来自最近播放和收藏", entries, false);
     }
 
+    private void openSearchDialog() {
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("输入片名或路径关键词");
+        input.setTextColor(0xFFFFFFFF);
+        input.setHintTextColor(0xFF8C96A3);
+        input.setSelectAllOnFocus(true);
+        new AlertDialog.Builder(this)
+                .setTitle("搜索")
+                .setView(input)
+                .setPositiveButton("搜索", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        openSearchResults(input.getText().toString());
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void openSearchResults(String keyword) {
+        browserMode = BROWSER_MODE_CATEGORY;
+        currentFilePath = "";
+        nativeHomeView.hide();
+        webView.setVisibility(View.GONE);
+        statusOverlay.hide();
+        List<FnosFileEntry> entries = filterSearch(knownMediaEntries(), keyword);
+        fileBrowserView.showCustom("搜索", keyword == null || keyword.length() == 0 ? "全部本机记录" : "关键词：" + keyword, entries, false);
+    }
+
     private void openMediaCenter(final String path) {
         browserMode = BROWSER_MODE_MEDIA;
         currentFilePath = path == null ? "" : path;
@@ -624,6 +655,20 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             } else if (NativeHomeView.ACTION_TV.equals(category) && isTv(entry)) {
                 filtered.add(entry);
             } else if (NativeHomeView.ACTION_OTHER.equals(category) && !isMovie(entry) && !isTv(entry)) {
+                filtered.add(entry);
+            }
+        }
+        return filtered;
+    }
+
+    private List<FnosFileEntry> filterSearch(List<FnosFileEntry> entries, String keyword) {
+        String value = keyword == null ? "" : keyword.toLowerCase();
+        List<FnosFileEntry> filtered = new ArrayList<FnosFileEntry>();
+        for (int i = 0; i < entries.size(); i++) {
+            FnosFileEntry entry = entries.get(i);
+            if (value.length() == 0
+                    || entry.name.toLowerCase().indexOf(value) >= 0
+                    || entry.path.toLowerCase().indexOf(value) >= 0) {
                 filtered.add(entry);
             }
         }

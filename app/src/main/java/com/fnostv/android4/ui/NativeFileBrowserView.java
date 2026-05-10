@@ -8,8 +8,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
+import android.widget.GridView;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.TextView;
 
 import com.fnostv.android4.net.FnosFileEntry;
@@ -33,9 +33,9 @@ public final class NativeFileBrowserView {
     private final EntryAdapter adapter = new EntryAdapter();
     private LinearLayout view;
     private TextView titleView;
-    private TextView pathView;
+    private TextView countView;
     private TextView emptyView;
-    private ListView listView;
+    private GridView gridView;
 
     public NativeFileBrowserView(Context context, Listener listener) {
         this.context = context;
@@ -45,40 +45,55 @@ public final class NativeFileBrowserView {
     public View create() {
         view = new LinearLayout(context);
         view.setOrientation(LinearLayout.VERTICAL);
-        view.setPadding(dp(36), dp(28), dp(36), dp(28));
+        view.setPadding(dp(44), dp(30), dp(36), dp(28));
         view.setBackgroundColor(FnosTheme.COLOR_APP_BG);
         view.setVisibility(View.GONE);
 
+        LinearLayout header = new LinearLayout(context);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
         titleView = new TextView(context);
         titleView.setText("文件库");
         titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(26);
-        view.addView(titleView, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+        titleView.setTextSize(22);
+        header.addView(titleView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        countView = new TextView(context);
+        countView.setTextColor(FnosTheme.COLOR_TEXT_MUTED);
+        countView.setTextSize(13);
+        header.addView(countView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        view.addView(header, rowParams(0, 22));
 
-        pathView = new TextView(context);
-        pathView.setTextColor(FnosTheme.COLOR_TEXT_MUTED);
-        pathView.setTextSize(14);
-        pathView.setSingleLine(true);
-        LinearLayout.LayoutParams pathParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        pathParams.topMargin = dp(6);
-        pathParams.bottomMargin = dp(18);
-        view.addView(pathView, pathParams);
+        LinearLayout tools = new LinearLayout(context);
+        tools.setOrientation(LinearLayout.HORIZONTAL);
+        tools.addView(chip("筛选⌄"), chipParams());
+        tools.addView(chip("添加日期⌄"), chipParams());
+        tools.addView(chip("布局⌄"), chipParams());
+        TextView hint = new TextView(context);
+        hint.setText("菜单键收藏/取消收藏");
+        hint.setTextColor(FnosTheme.COLOR_TEXT_DIM);
+        hint.setTextSize(13);
+        hint.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(0, dp(38), 1);
+        hintParams.leftMargin = dp(12);
+        tools.addView(hint, hintParams);
+        view.addView(tools, rowParams(0, 22));
 
-        listView = new ListView(context);
-        listView.setAdapter(adapter);
-        listView.setFocusable(true);
-        listView.setDividerHeight(1);
-        listView.setCacheColorHint(Color.TRANSPARENT);
-        listView.setBackgroundColor(Color.TRANSPARENT);
-        listView.setOnKeyListener(new View.OnKeyListener() {
+        gridView = new GridView(context);
+        gridView.setAdapter(adapter);
+        gridView.setFocusable(true);
+        gridView.setNumColumns(GridView.AUTO_FIT);
+        gridView.setColumnWidth(dp(160));
+        gridView.setHorizontalSpacing(dp(18));
+        gridView.setVerticalSpacing(dp(22));
+        gridView.setStretchMode(GridView.NO_STRETCH);
+        gridView.setCacheColorHint(Color.TRANSPARENT);
+        gridView.setBackgroundColor(Color.TRANSPARENT);
+        gridView.setSelector(FnosTheme.stroked(0x002F86F6, FnosTheme.COLOR_PRIMARY, 8, context));
+        gridView.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View v, int keyCode, KeyEvent event) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    int position = listView.getSelectedItemPosition();
+                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_MENU) {
+                    int position = gridView.getSelectedItemPosition();
                     if (position >= 0 && position < adapter.getCount()) {
                         FnosFileEntry entry = adapter.getItem(position);
                         if (!entry.directory) {
@@ -91,20 +106,21 @@ public final class NativeFileBrowserView {
                 return false;
             }
         });
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View clicked, int position, long id) {
                 listener.onFileEntrySelected(adapter.getItem(position));
             }
         });
+
         emptyView = new TextView(context);
-        emptyView.setText("暂无内容");
+        emptyView.setText("无数据");
         emptyView.setTextColor(FnosTheme.COLOR_TEXT_MUTED);
         emptyView.setTextSize(18);
         emptyView.setGravity(Gravity.CENTER);
         emptyView.setVisibility(View.GONE);
-        listView.setEmptyView(emptyView);
-        view.addView(listView, new LinearLayout.LayoutParams(
+        gridView.setEmptyView(emptyView);
+        view.addView(gridView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0,
                 1));
@@ -124,13 +140,13 @@ public final class NativeFileBrowserView {
             view.setVisibility(View.VISIBLE);
         }
         titleView.setText(title == null || title.length() == 0 ? "文件库" : title);
-        String path = subtitle == null || subtitle.length() == 0 ? "根目录" : subtitle;
-        pathView.setText(path + "    右键收藏/取消收藏");
+        int count = entries == null ? 0 : entries.size();
+        countView.setText("共 " + count + " 项");
         adapter.setEntries(entries, sortEntries);
-        if (listView != null) {
-            listView.requestFocus();
-            if (entries != null && entries.size() > 0) {
-                listView.setSelection(0);
+        if (gridView != null) {
+            gridView.requestFocus();
+            if (count > 0) {
+                gridView.setSelection(0);
             }
         }
     }
@@ -143,6 +159,32 @@ public final class NativeFileBrowserView {
 
     public boolean isVisible() {
         return view != null && view.getVisibility() == View.VISIBLE;
+    }
+
+    private TextView chip(String text) {
+        TextView chip = new TextView(context);
+        chip.setText(text);
+        chip.setTextColor(FnosTheme.COLOR_TEXT);
+        chip.setTextSize(13);
+        chip.setGravity(Gravity.CENTER);
+        chip.setBackgroundDrawable(FnosTheme.stroked(FnosTheme.COLOR_APP_BG, FnosTheme.COLOR_STROKE, 18, context));
+        chip.setFocusable(true);
+        return chip;
+    }
+
+    private LinearLayout.LayoutParams chipParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(86), dp(38));
+        params.rightMargin = dp(12);
+        return params;
+    }
+
+    private LinearLayout.LayoutParams rowParams(int top, int bottom) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(top);
+        params.bottomMargin = dp(bottom);
+        return params;
     }
 
     private int dp(int value) {
@@ -191,47 +233,56 @@ public final class NativeFileBrowserView {
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
-            TextView row = convertView instanceof TextView ? (TextView) convertView : rowView();
+            LinearLayout card = convertView instanceof LinearLayout ? (LinearLayout) convertView : cardView();
             FnosFileEntry entry = getItem(position);
-            row.setText(labelFor(entry));
-            return row;
+            TextView poster = (TextView) card.getChildAt(0);
+            TextView title = (TextView) card.getChildAt(1);
+            poster.setText(posterText(entry));
+            title.setText(titleText(entry));
+            return card;
         }
 
-        private String labelFor(FnosFileEntry entry) {
+        private LinearLayout cardView() {
+            LinearLayout card = new LinearLayout(context);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setGravity(Gravity.CENTER_HORIZONTAL);
+            card.setPadding(0, 0, 0, 0);
+
+            TextView poster = new TextView(context);
+            poster.setTextColor(FnosTheme.COLOR_TEXT);
+            poster.setTextSize(15);
+            poster.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            poster.setPadding(dp(8), dp(8), dp(8), dp(12));
+            poster.setBackgroundDrawable(FnosTheme.rounded(FnosTheme.COLOR_CARD, 8, context));
+            card.addView(poster, new LinearLayout.LayoutParams(dp(154), dp(224)));
+
+            TextView title = new TextView(context);
+            title.setTextColor(FnosTheme.COLOR_TEXT);
+            title.setTextSize(14);
+            title.setGravity(Gravity.CENTER);
+            title.setSingleLine(true);
+            LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(dp(154), ViewGroup.LayoutParams.WRAP_CONTENT);
+            titleParams.topMargin = dp(8);
+            card.addView(title, titleParams);
+            return card;
+        }
+
+        private String posterText(FnosFileEntry entry) {
             if (entry.directory) {
-                return "[目录] " + entry.name;
+                return "影\n\n媒体库";
             }
-            String favorite = listener.isFileFavorite(entry) ? "[收藏] " : "";
-            String prefix = entry.isVideo() ? "[视频] " : "[文件] ";
-            String size = formatSize(entry.size);
-            return size.length() == 0 ? favorite + prefix + entry.name : favorite + prefix + entry.name + "    " + size;
+            String badge = entry.formatLabel();
+            if (listener.isFileFavorite(entry)) {
+                badge = "♡ " + badge;
+            }
+            return badge;
         }
 
-        private String formatSize(long size) {
-            if (size <= 0L) {
-                return "";
+        private String titleText(FnosFileEntry entry) {
+            if (entry.name.length() <= 10) {
+                return entry.name;
             }
-            if (size >= 1024L * 1024L * 1024L) {
-                return String.format("%.1f GB", size / 1024.0 / 1024.0 / 1024.0);
-            }
-            if (size >= 1024L * 1024L) {
-                return String.format("%.1f MB", size / 1024.0 / 1024.0);
-            }
-            if (size >= 1024L) {
-                return String.format("%.1f KB", size / 1024.0);
-            }
-            return size + " B";
-        }
-
-        private TextView rowView() {
-            TextView row = new TextView(context);
-            row.setTextColor(Color.WHITE);
-            row.setTextSize(18);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(18), 0, dp(18), 0);
-            row.setMinHeight(dp(54));
-            row.setBackgroundDrawable(FnosTheme.rounded(FnosTheme.COLOR_CARD, 4, context));
-            return row;
+            return entry.name.substring(0, 10) + "...";
         }
     }
 }

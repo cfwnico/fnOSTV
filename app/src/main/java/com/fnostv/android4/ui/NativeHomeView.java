@@ -91,7 +91,7 @@ public final class NativeHomeView {
             heroCard.setText("影视大全\n" + libraryCount + " 个媒体库");
         }
         if (recentCard != null) {
-            recentCard.setText(allCount == 0 ? "暂无最近播放" : "最近播放\n" + allCount + " 个项目");
+            recentCard.setText(allCount == 0 ? "继续观看\n暂无最近播放" : "继续观看\n" + allCount + " 个项目");
         }
     }
 
@@ -108,24 +108,24 @@ public final class NativeHomeView {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         sidebar.addView(logo, navParams(0, 28));
 
-        firstNav = navItem("首页", ACTION_HOME, null);
+        firstNav = navItem("首", "首页", ACTION_HOME, null);
         sidebar.addView(firstNav, navParams(0, 8));
         favoriteCountView = countView();
-        sidebar.addView(navItem("收藏", ACTION_FAVORITES, favoriteCountView), navParams(0, 30));
+        sidebar.addView(navItem("藏", "收藏", ACTION_FAVORITES, favoriteCountView), navParams(0, 30));
 
         sidebar.addView(section("媒体库"), navParams(0, 8));
         libraryCountView = countView();
-        sidebar.addView(navItem("影视大全", ACTION_MEDIA, libraryCountView), navParams(0, 28));
+        sidebar.addView(navItem("影", "影视大全", ACTION_MEDIA, libraryCountView), navParams(0, 28));
 
         sidebar.addView(section("分类"), navParams(0, 8));
         allCountView = countView();
-        sidebar.addView(navItem("全部", ACTION_ALL, allCountView), navParams(0, 8));
+        sidebar.addView(navItem("全", "全部", ACTION_ALL, allCountView), navParams(0, 8));
         movieCountView = countView();
-        sidebar.addView(navItem("电影", ACTION_MOVIES, movieCountView), navParams(0, 8));
+        sidebar.addView(navItem("电", "电影", ACTION_MOVIES, movieCountView), navParams(0, 8));
         tvCountView = countView();
-        sidebar.addView(navItem("电视节目", ACTION_TV, tvCountView), navParams(0, 8));
+        sidebar.addView(navItem("剧", "电视节目", ACTION_TV, tvCountView), navParams(0, 8));
         otherCountView = countView();
-        sidebar.addView(navItem("其他", ACTION_OTHER, otherCountView), navParams(0, 8));
+        sidebar.addView(navItem("他", "其他", ACTION_OTHER, otherCountView), navParams(0, 8));
         return sidebar;
     }
 
@@ -143,9 +143,9 @@ public final class NativeHomeView {
         title.setTextColor(FnosTheme.COLOR_TEXT);
         title.setTextSize(21);
         top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        top.addView(iconButton("搜索", ACTION_SEARCH), iconParams());
-        top.addView(iconButton("用户", ACTION_USER), iconParams());
-        top.addView(iconButton("设置", ACTION_SETTINGS), iconParams());
+        top.addView(iconButton("搜", ACTION_SEARCH), iconParams());
+        top.addView(iconButton("人", ACTION_USER), iconParams());
+        top.addView(iconButton("设", ACTION_SETTINGS), iconParams());
         content.addView(top, rowParams(0, 28));
 
         content.addView(sectionTitle("媒体库"), rowParams(0, 12));
@@ -155,7 +155,7 @@ public final class NativeHomeView {
         content.addView(sectionLink("影视大全  ›", ACTION_MEDIA), rowParams(0, 12));
         LinearLayout cards = new LinearLayout(context);
         cards.setOrientation(LinearLayout.HORIZONTAL);
-        recentCard = mediaCard("暂无最近播放", ACTION_RECENT, dp(160), dp(235));
+        recentCard = mediaCard("继续观看\n暂无最近播放", ACTION_RECENT, dp(160), dp(235));
         cards.addView(recentCard, new LinearLayout.LayoutParams(dp(160), dp(235)));
         TextView favoriteCard = mediaCard("收藏\n快速访问", ACTION_FAVORITES, dp(160), dp(235));
         LinearLayout.LayoutParams favoriteParams = new LinearLayout.LayoutParams(dp(160), dp(235));
@@ -165,7 +165,7 @@ public final class NativeHomeView {
         return content;
     }
 
-    private View navItem(String label, final String action, TextView countView) {
+    private View navItem(String icon, String label, final String action, TextView countView) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -186,10 +186,18 @@ public final class NativeHomeView {
             }
         });
 
+        TextView iconView = new TextView(context);
+        iconView.setText(icon);
+        iconView.setTextColor(FnosTheme.COLOR_TEXT);
+        iconView.setTextSize(16);
+        iconView.setGravity(Gravity.CENTER);
+        row.addView(iconView, new LinearLayout.LayoutParams(dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
+
         TextView text = new TextView(context);
         text.setText(label);
         text.setTextColor(FnosTheme.COLOR_TEXT);
         text.setTextSize(15);
+        text.setPadding(dp(6), 0, 0, 0);
         row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         if (countView != null) {
             row.addView(countView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -247,7 +255,7 @@ public final class NativeHomeView {
 
     private TextView iconButton(String label, final String action) {
         TextView button = new TextView(context);
-        button.setText(label.substring(0, 1));
+        button.setText(label);
         button.setTextColor(FnosTheme.COLOR_TEXT);
         button.setTextSize(14);
         button.setGravity(Gravity.CENTER);
