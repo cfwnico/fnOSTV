@@ -29,6 +29,7 @@ import com.fnostv.android4.net.FnosSession;
 import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
+import com.fnostv.android4.ui.NativeHomeView;
 import com.fnostv.android4.ui.StatusOverlay;
 import com.fnostv.android4.util.Constants;
 import com.fnostv.android4.util.Logger;
@@ -40,9 +41,10 @@ import com.fnostv.android4.web.LoginScript;
 import com.fnostv.android4.web.WebViewConfigurator;
 import com.fnostv.android4.web.WebViewEvents;
 
-public final class MainActivity extends Activity implements WebViewEvents, RemoteActions {
+public final class MainActivity extends Activity implements WebViewEvents, RemoteActions, NativeHomeView.Listener {
     private FrameLayout root;
     private WebView webView;
+    private NativeHomeView nativeHomeView;
     private ProgressBar progressBar;
     private StatusOverlay statusOverlay;
     private FullscreenVideoController fullscreenVideoController;
@@ -134,6 +136,11 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 ViewGroup.LayoutParams.MATCH_PARENT));
         fullscreenVideoController = new FullscreenVideoController(root, webView);
 
+        nativeHomeView = new NativeHomeView(this, this);
+        root.addView(nativeHomeView.create(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -156,6 +163,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private void loadProfileOrSettings() {
         profile = store.load();
+        nativeHomeView.hide();
         if (!profile.isReady()) {
             showStatus("首次使用请配置飞牛服务地址");
             openSettings();
@@ -184,7 +192,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                     public void run() {
                         nativeAuthRunning = false;
                         if (result.success) {
-                            showStatus("原生登录成功\n文件库和影视首页正在接入中");
+                            showNativeHome();
                         } else {
                             handleServerConnectionFailure(result.message);
                         }
@@ -237,6 +245,31 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         }
         startActivityForResult(intent, Constants.REQUEST_SETTINGS);
         return true;
+    }
+
+    private void showNativeHome() {
+        cancelLoadTimeout();
+        progressBar.setVisibility(View.GONE);
+        statusOverlay.hide();
+        webView.setVisibility(View.GONE);
+        nativeHomeView.show();
+    }
+
+    @Override
+    public void onHomeAction(String action) {
+        if (NativeHomeView.ACTION_SETTINGS.equals(action)) {
+            openSettings();
+            return;
+        }
+        if (NativeHomeView.ACTION_FILES.equals(action)) {
+            showStatus("文件库正在接入 file.lsDir");
+            return;
+        }
+        if (NativeHomeView.ACTION_MEDIA.equals(action)) {
+            showStatus("影视中心接口正在反查");
+            return;
+        }
+        showStatus("最近播放正在接入");
     }
 
     @Override
