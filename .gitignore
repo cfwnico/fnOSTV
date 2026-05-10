@@ -1,5 +1,6 @@
 .gradle/
 .tooling/
+signing/
 build/
 app/build/
 local.properties
