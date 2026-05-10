@@ -2,12 +2,12 @@ package com.fnostv.android4.ui;
 
 import android.content.Context;
 import android.graphics.Color;
-import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -17,31 +17,35 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.VideoView;
+
+import com.fnostv.android4.net.FnosFileEntry;
 
 import java.lang.reflect.Method;
 import java.util.Locale;
 
-import com.fnostv.android4.net.FnosFileEntry;
+import tv.danmaku.ijk.media.player.IMediaPlayer;
+import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
 public final class NativeVideoPlayerView {
     public interface Listener {
-        void onNativeVideoError(FnosFileEntry entry, String url);
+        void onNativeVideoError(FnosFileEntry entry, String url, String reason);
     }
 
     private static final int SEEK_STEP_MS = 10000;
     private static final int LARGE_SEEK_STEP_MS = 30000;
     private static final int CONTROL_HIDE_DELAY_MS = 5000;
     private static final int PROGRESS_INTERVAL_MS = 1000;
+    private static final int PREPARE_TIMEOUT_MS = 20000;
     private static final int MODE_FILL = 0;
     private static final int MODE_FIT = 1;
     private static final float[] SPEEDS = new float[]{1.0f, 1.25f, 1.5f, 2.0f, 0.75f};
+    private static boolean ijkLoaded;
 
     private final Context context;
     private final Listener listener;
     private final Handler handler = new Handler();
     private FrameLayout view;
-    private PlaybackVideoView videoView;
+    private PlaybackSurfaceView videoView;
     private ProgressBar loadingView;
     private TextView titleView;
     private LinearLayout controlBar;
@@ -52,11 +56,14 @@ public final class NativeVideoPlayerView {
     private TextView pictureView;
     private TextView resolutionView;
     private TextView hintView;
+    private SurfaceHolder surfaceHolder;
     private FnosFileEntry currentEntry;
     private String currentUrl = "";
-    private MediaPlayer currentPlayer;
+    private IjkMediaPlayer currentPlayer;
+    private boolean surfaceReady;
     private boolean dragging;
     private boolean suppressErrors;
+    private boolean prepared;
     private int speedIndex;
     private int pictureMode = MODE_FILL;
     private int videoWidth;
@@ -76,6 +83,14 @@ public final class NativeVideoPlayerView {
             hideControls();
         }
     };
+    private final Runnable prepareTimeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isVisible() && !prepared && !suppressErrors) {
+                notifyPlaybackError("播放器准备超时");
+            }
+        }
+    };
 
     public NativeVideoPlayerView(Context context, Listener listener) {
         this.context = context;
@@ -87,37 +102,38 @@ public final class NativeVideoPlayerView {
         view.setBackgroundColor(Color.BLACK);
         view.setVisibility(View.GONE);
 
-        videoView = new PlaybackVideoView(context);
+        videoView = new PlaybackSurfaceView(context);
         videoView.setResizeMode(pictureMode);
-        videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+        videoView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
-            public void onPrepared(MediaPlayer player) {
-                currentPlayer = player;
-                videoWidth = player.getVideoWidth();
-                videoHeight = player.getVideoHeight();
-                videoView.setVideoSize(videoWidth, videoHeight);
-                loadingView.setVisibility(View.GONE);
-                videoView.start();
-                videoView.requestFocus();
-                updateProgress();
-                updateControlText();
-                showControlsTemporarily();
-            }
-        });
-        videoView.setOnErrorListener(new MediaPlayer.OnErrorListener() {
-            @Override
-            public boolean onError(MediaPlayer player, int what, int extra) {
-                loadingView.setVisibility(View.GONE);
-                if (suppressErrors || currentUrl.length() == 0) {
-                    return true;
+            public void surfaceCreated(SurfaceHolder holder) {
+                surfaceHolder = holder;
+                surfaceReady = true;
+                if (currentPlayer != null) {
+                    currentPlayer.setDisplay(holder);
+                } else if (currentUrl.length() > 0 && view.getVisibility() == View.VISIBLE) {
+                    startPlayer();
                 }
-                listener.onNativeVideoError(currentEntry, currentUrl);
-                return true;
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                surfaceHolder = holder;
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                surfaceReady = false;
+                surfaceHolder = null;
+                if (currentPlayer != null) {
+                    currentPlayer.setDisplay(null);
+                }
             }
         });
         view.addView(videoView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER));
 
         titleView = new TextView(context);
         titleView.setTextColor(Color.WHITE);
@@ -209,6 +225,7 @@ public final class NativeVideoPlayerView {
         currentEntry = entry;
         currentUrl = url == null ? "" : url;
         suppressErrors = false;
+        prepared = false;
         titleView.setText(entry == null ? "" : entry.name);
         loadingView.setVisibility(View.VISIBLE);
         view.setVisibility(View.VISIBLE);
@@ -217,11 +234,15 @@ public final class NativeVideoPlayerView {
         speedIndex = 0;
         videoWidth = 0;
         videoHeight = 0;
-        currentPlayer = null;
         videoView.setResizeMode(pictureMode);
-        videoView.setVideoURI(Uri.parse(currentUrl));
+        releasePlayer(false);
+        if (surfaceReady) {
+            startPlayer();
+        }
         handler.removeCallbacks(progressRunnable);
         handler.post(progressRunnable);
+        handler.removeCallbacks(prepareTimeoutRunnable);
+        handler.postDelayed(prepareTimeoutRunnable, PREPARE_TIMEOUT_MS);
         showControlsTemporarily();
     }
 
@@ -230,14 +251,14 @@ public final class NativeVideoPlayerView {
     }
 
     public boolean toggle() {
-        if (!isVisible()) {
+        if (!isVisible() || currentPlayer == null) {
             return false;
         }
-        if (videoView.isPlaying()) {
-            videoView.pause();
+        if (currentPlayer.isPlaying()) {
+            currentPlayer.pause();
             showHint("已暂停");
         } else {
-            videoView.start();
+            currentPlayer.start();
             showHint("继续播放");
         }
         updateControlText();
@@ -287,13 +308,109 @@ public final class NativeVideoPlayerView {
         }
         handler.removeCallbacks(progressRunnable);
         handler.removeCallbacks(hideControlsRunnable);
+        handler.removeCallbacks(prepareTimeoutRunnable);
         suppressErrors = true;
-        videoView.stopPlayback();
+        releasePlayer(true);
         view.setVisibility(View.GONE);
         view.setKeepScreenOn(false);
         currentEntry = null;
         currentUrl = "";
-        currentPlayer = null;
+        prepared = false;
+    }
+
+    private void startPlayer() {
+        if (currentUrl.length() == 0 || !surfaceReady) {
+            return;
+        }
+        try {
+            ensureIjkLoaded();
+            IjkMediaPlayer player = new IjkMediaPlayer();
+            configurePlayer(player);
+            currentPlayer = player;
+            player.setDisplay(surfaceHolder);
+            player.setOnPreparedListener(new IMediaPlayer.OnPreparedListener() {
+                @Override
+                public void onPrepared(IMediaPlayer mediaPlayer) {
+                    handler.removeCallbacks(prepareTimeoutRunnable);
+                    prepared = true;
+                    videoWidth = mediaPlayer.getVideoWidth();
+                    videoHeight = mediaPlayer.getVideoHeight();
+                    videoView.setVideoSize(videoWidth, videoHeight);
+                    loadingView.setVisibility(View.GONE);
+                    mediaPlayer.start();
+                    updateProgress();
+                    updateControlText();
+                    showControlsTemporarily();
+                }
+            });
+            player.setOnVideoSizeChangedListener(new IMediaPlayer.OnVideoSizeChangedListener() {
+                @Override
+                public void onVideoSizeChanged(IMediaPlayer mediaPlayer, int width, int height, int sarNum, int sarDen) {
+                    videoWidth = width;
+                    videoHeight = height;
+                    videoView.setVideoSize(videoWidth, videoHeight);
+                    updateControlText();
+                }
+            });
+            player.setOnErrorListener(new IMediaPlayer.OnErrorListener() {
+                @Override
+                public boolean onError(IMediaPlayer mediaPlayer, int what, int extra) {
+                    loadingView.setVisibility(View.GONE);
+                    if (suppressErrors || currentUrl.length() == 0) {
+                        return true;
+                    }
+                    notifyPlaybackError("播放器错误 what=" + what + " extra=" + extra);
+                    return true;
+                }
+            });
+            player.setDataSource(currentUrl);
+            player.prepareAsync();
+        } catch (Exception ex) {
+            loadingView.setVisibility(View.GONE);
+            notifyPlaybackError("播放器初始化失败：" + ex.getMessage());
+        }
+    }
+
+    private static synchronized void ensureIjkLoaded() {
+        if (!ijkLoaded) {
+            IjkMediaPlayer.loadLibrariesOnce(null);
+            ijkLoaded = true;
+        }
+    }
+
+    private void configurePlayer(IjkMediaPlayer player) {
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 0);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
+    }
+
+    private void releasePlayer(boolean clearCurrent) {
+        if (currentPlayer == null) {
+            return;
+        }
+        try {
+            currentPlayer.setDisplay(null);
+            currentPlayer.stop();
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            currentPlayer.release();
+        } catch (RuntimeException ignored) {
+        }
+        if (clearCurrent) {
+            currentPlayer = null;
+        } else {
+            currentPlayer = null;
+        }
+    }
+
+    private void notifyPlaybackError(String reason) {
+        handler.removeCallbacks(prepareTimeoutRunnable);
+        suppressErrors = true;
+        releasePlayer(true);
+        listener.onNativeVideoError(currentEntry, currentUrl, reason);
     }
 
     private TextView controlText(String text) {
@@ -316,7 +433,9 @@ public final class NativeVideoPlayerView {
 
     private void seekTo(int targetMs) {
         try {
-            videoView.seekTo(targetMs);
+            if (currentPlayer != null) {
+                currentPlayer.seekTo(targetMs);
+            }
             updateProgress();
         } catch (RuntimeException ignored) {
             showHint("暂时无法跳转");
@@ -330,25 +449,21 @@ public final class NativeVideoPlayerView {
             showHint("倍速 " + formatSpeed(speed));
         } else {
             speedIndex = 0;
-            showHint("当前 Android 版本不支持倍速播放");
+            showHint("当前播放器不支持倍速播放");
         }
         updateControlText();
         showControlsTemporarily();
     }
 
     private boolean applyPlaybackSpeed(float speed) {
-        if (currentPlayer == null || Build.VERSION.SDK_INT < 23) {
+        if (currentPlayer == null) {
             return speed == 1.0f;
         }
         try {
-            Method getParams = currentPlayer.getClass().getMethod("getPlaybackParams");
-            Object params = getParams.invoke(currentPlayer);
-            Method setSpeed = params.getClass().getMethod("setSpeed", float.class);
-            Object updated = setSpeed.invoke(params, speed);
-            Method setParams = currentPlayer.getClass().getMethod("setPlaybackParams", params.getClass());
-            setParams.invoke(currentPlayer, updated);
-            if (!videoView.isPlaying()) {
-                videoView.start();
+            Method method = currentPlayer.getClass().getMethod("setSpeed", float.class);
+            method.invoke(currentPlayer, speed);
+            if (!currentPlayer.isPlaying()) {
+                currentPlayer.start();
             }
             return true;
         } catch (Exception ex) {
@@ -384,7 +499,7 @@ public final class NativeVideoPlayerView {
     }
 
     private void updateControlText() {
-        playStateView.setText(videoView != null && videoView.isPlaying() ? "播放中" : "已暂停");
+        playStateView.setText(currentPlayer != null && currentPlayer.isPlaying() ? "播放中" : "已暂停");
         speedView.setText("倍速 " + formatSpeed(SPEEDS[speedIndex]));
         pictureView.setText(pictureMode == MODE_FILL ? "画面 铺满" : "画面 适应");
         if (videoWidth > 0 && videoHeight > 0) {
@@ -396,7 +511,7 @@ public final class NativeVideoPlayerView {
 
     private int duration() {
         try {
-            return videoView == null ? 0 : Math.max(0, videoView.getDuration());
+            return currentPlayer == null ? 0 : (int) Math.max(0, currentPlayer.getDuration());
         } catch (RuntimeException ex) {
             return 0;
         }
@@ -404,7 +519,7 @@ public final class NativeVideoPlayerView {
 
     private int position() {
         try {
-            return videoView == null ? 0 : Math.max(0, videoView.getCurrentPosition());
+            return currentPlayer == null ? 0 : (int) Math.max(0, currentPlayer.getCurrentPosition());
         } catch (RuntimeException ex) {
             return 0;
         }
@@ -439,7 +554,7 @@ public final class NativeVideoPlayerView {
     }
 
     private void hideControls() {
-        if (isVisible() && videoView.isPlaying()) {
+        if (isVisible() && currentPlayer != null && currentPlayer.isPlaying()) {
             controlBar.setVisibility(View.GONE);
             titleView.setVisibility(View.GONE);
         }
@@ -476,12 +591,12 @@ public final class NativeVideoPlayerView {
         return (int) (value * context.getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    private static final class PlaybackVideoView extends VideoView {
+    private static final class PlaybackSurfaceView extends SurfaceView {
         private int resizeMode = MODE_FILL;
         private int videoWidth;
         private int videoHeight;
 
-        PlaybackVideoView(Context context) {
+        PlaybackSurfaceView(Context context) {
             super(context);
         }
 

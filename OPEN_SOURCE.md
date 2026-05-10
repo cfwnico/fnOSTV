@@ -43,3 +43,8 @@ scripts\build-release.cmd
 
 - 发布 release APK 前应确认签名状态，并妥善保存对应 keystore。
 - 发布包不应包含 `.tooling/`、`local.properties`、`keystore.properties`、`signing/`、构建缓存或本地调试数据。
+
+## 当前第三方运行时依赖
+
+- OkHttp 3.12.13，Apache License 2.0，用于 Android 4 兼容网络层和 WebSocket。
+- IJKPlayer 0.8.8，LGPL-2.1，用于 Android 4 原生视频播放兼容，包含 FFmpeg 原生播放组件。分发 APK 时应保留 IJKPlayer/FFmpeg 相关许可证声明，不得移除 `NOTICE` 中的第三方组件说明。

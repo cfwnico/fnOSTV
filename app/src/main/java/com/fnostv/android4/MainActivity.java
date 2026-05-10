@@ -310,9 +310,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     @Override
-    public void onNativeVideoError(FnosFileEntry entry, String url) {
+    public void onNativeVideoError(FnosFileEntry entry, String url, String reason) {
+        Logger.w("Native video playback failed: " + reason
+                + " file=" + (entry == null ? "" : entry.name)
+                + " format=" + (entry == null ? "" : entry.formatLabel()));
         nativeVideoPlayerView.hide();
-        openExternalPlayer(entry, url, "内置播放器无法播放，正在尝试外部播放器");
+        openExternalPlayer(entry, url, "内置播放器无法播放"
+                + (reason == null || reason.length() == 0 ? "" : "（" + reason + "）")
+                + "，正在尝试外部播放器");
     }
 
     @Override
@@ -407,11 +412,20 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         }
         String url = entry.playbackUrl();
         if (url.length() > 0) {
-            statusOverlay.hide();
-            nativeVideoPlayerView.play(entry, url);
+            playResolvedUrl(entry, url);
             return;
         }
         resolveAndPlayFile(entry);
+    }
+
+    private void playResolvedUrl(FnosFileEntry entry, String url) {
+        statusOverlay.hide();
+        if (entry.canTryNativePlayback()) {
+            nativeVideoPlayerView.play(entry, url);
+            return;
+        }
+        openExternalPlayer(entry, url, "当前格式 " + entry.formatLabel()
+                + " 超出 Android 4 内置播放器兼容范围，正在尝试外部播放器");
     }
 
     private void resolveAndPlayFile(final FnosFileEntry entry) {
@@ -424,8 +438,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                     @Override
                     public void run() {
                         if (result.success) {
-                            statusOverlay.hide();
-                            nativeVideoPlayerView.play(entry, result.url);
+                            playResolvedUrl(entry, result.url);
                         } else {
                             showStatus(result.message);
                         }
@@ -460,6 +473,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(Uri.parse(url), entry == null ? "video/*" : entry.mimeType());
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            if (entry != null) {
+                intent.putExtra("title", entry.name);
+            }
+            if (intent.resolveActivity(getPackageManager()) == null) {
+                showStatus(fallbackMessage + "\n未找到外部播放器，请安装 VLC、MX Player 或系统兼容播放器");
+                return;
+            }
             startActivity(intent);
         } catch (ActivityNotFoundException ex) {
             showStatus(fallbackMessage + "\n未找到可播放该视频的外部应用");

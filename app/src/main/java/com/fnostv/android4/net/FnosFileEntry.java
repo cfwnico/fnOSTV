@@ -45,6 +45,7 @@ public final class FnosFileEntry {
                 || value.endsWith(".m4v")
                 || value.endsWith(".mov")
                 || value.endsWith(".3gp")
+                || value.endsWith(".3gpp")
                 || value.endsWith(".webm")
                 || value.endsWith(".mkv")
                 || value.endsWith(".avi")
@@ -52,7 +53,17 @@ public final class FnosFileEntry {
                 || value.endsWith(".asf")
                 || value.endsWith(".ts")
                 || value.endsWith(".m2ts")
-                || value.endsWith(".flv");
+                || value.endsWith(".flv")
+                || value.endsWith(".mpeg")
+                || value.endsWith(".mpg")
+                || value.endsWith(".vob")
+                || value.endsWith(".m3u8")
+                || value.endsWith(".rm")
+                || value.endsWith(".rmvb");
+    }
+
+    public boolean canTryNativePlayback() {
+        return isVideo();
     }
 
     public String playbackUrl() {
@@ -70,13 +81,45 @@ public final class FnosFileEntry {
         if (value.endsWith(".mp4") || value.endsWith(".m4v")) {
             return "video/mp4";
         }
+        if (value.endsWith(".mov")) {
+            return "video/quicktime";
+        }
         if (value.endsWith(".3gp")) {
             return "video/3gpp";
         }
         if (value.endsWith(".webm")) {
             return "video/webm";
         }
+        if (value.endsWith(".m3u8")) {
+            return "application/vnd.apple.mpegurl";
+        }
+        if (value.endsWith(".ts") || value.endsWith(".m2ts")) {
+            return "video/mp2t";
+        }
+        if (value.endsWith(".mpeg") || value.endsWith(".mpg") || value.endsWith(".vob")) {
+            return "video/mpeg";
+        }
+        if (value.endsWith(".avi")) {
+            return "video/x-msvideo";
+        }
+        if (value.endsWith(".wmv") || value.endsWith(".asf")) {
+            return "video/x-ms-wmv";
+        }
+        if (value.endsWith(".flv")) {
+            return "video/x-flv";
+        }
+        if (value.endsWith(".mkv")) {
+            return "video/x-matroska";
+        }
+        if (value.endsWith(".rm") || value.endsWith(".rmvb")) {
+            return "application/vnd.rn-realmedia";
+        }
         return "video/*";
+    }
+
+    public String formatLabel() {
+        String value = extension();
+        return value.length() == 0 ? "video" : value.toUpperCase();
     }
 
     private static String rootPath(JSONObject object, String parentPath, String uid, String name) {
@@ -120,5 +163,18 @@ public final class FnosFileEntry {
 
     private static String lower(String value) {
         return value == null ? "" : value.toLowerCase();
+    }
+
+    private String extension() {
+        String value = lower(name);
+        int queryIndex = value.indexOf('?');
+        if (queryIndex >= 0) {
+            value = value.substring(0, queryIndex);
+        }
+        int index = value.lastIndexOf('.');
+        if (index < 0 || index == value.length() - 1) {
+            return "";
+        }
+        return value.substring(index + 1);
     }
 }
