@@ -129,6 +129,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (nativeVideoPlayerView != null && nativeVideoPlayerView.onKeyDown(keyCode, event)) {
+            return true;
+        }
         if (remoteKeyHandler.onKeyDown(keyCode, event)) {
             return true;
         }
