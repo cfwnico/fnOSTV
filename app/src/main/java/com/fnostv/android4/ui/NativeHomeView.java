@@ -108,24 +108,24 @@ public final class NativeHomeView {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         sidebar.addView(logo, navParams(0, 28));
 
-        firstNav = navItem("首", "首页", ACTION_HOME, null);
+        firstNav = navItem(FnosSidebarIconView.TYPE_HOME, "首页", ACTION_HOME, null);
         sidebar.addView(firstNav, navParams(0, 8));
         favoriteCountView = countView();
-        sidebar.addView(navItem("藏", "收藏", ACTION_FAVORITES, favoriteCountView), navParams(0, 30));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_FAVORITE, "收藏", ACTION_FAVORITES, favoriteCountView), navParams(0, 30));
 
         sidebar.addView(section("媒体库"), navParams(0, 8));
         libraryCountView = countView();
-        sidebar.addView(navItem("影", "影视大全", ACTION_MEDIA, libraryCountView), navParams(0, 28));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_LIBRARY, "影视大全", ACTION_MEDIA, libraryCountView), navParams(0, 28));
 
         sidebar.addView(section("分类"), navParams(0, 8));
         allCountView = countView();
-        sidebar.addView(navItem("全", "全部", ACTION_ALL, allCountView), navParams(0, 8));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_ALL, "全部", ACTION_ALL, allCountView), navParams(0, 8));
         movieCountView = countView();
-        sidebar.addView(navItem("电", "电影", ACTION_MOVIES, movieCountView), navParams(0, 8));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_MOVIE, "电影", ACTION_MOVIES, movieCountView), navParams(0, 8));
         tvCountView = countView();
-        sidebar.addView(navItem("剧", "电视节目", ACTION_TV, tvCountView), navParams(0, 8));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_TV, "电视节目", ACTION_TV, tvCountView), navParams(0, 8));
         otherCountView = countView();
-        sidebar.addView(navItem("他", "其他", ACTION_OTHER, otherCountView), navParams(0, 8));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_OTHER, "其他", ACTION_OTHER, otherCountView), navParams(0, 8));
         return sidebar;
     }
 
@@ -165,7 +165,7 @@ public final class NativeHomeView {
         return content;
     }
 
-    private View navItem(String icon, String label, final String action, TextView countView) {
+    private View navItem(String iconType, String label, final String action, TextView countView) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -186,12 +186,8 @@ public final class NativeHomeView {
             }
         });
 
-        TextView iconView = new TextView(context);
-        iconView.setText(icon);
-        iconView.setTextColor(FnosTheme.COLOR_TEXT);
-        iconView.setTextSize(16);
-        iconView.setGravity(Gravity.CENTER);
-        row.addView(iconView, new LinearLayout.LayoutParams(dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
+        FnosSidebarIconView iconView = new FnosSidebarIconView(context, iconType);
+        row.addView(iconView, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         TextView text = new TextView(context);
         text.setText(label);
