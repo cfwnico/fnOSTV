@@ -225,10 +225,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             FnosSession session = sessionStore.load();
             if (session.hasToken()) {
-                FnosRpcClient authClient = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-                if (authClient.authToken(session)) {
-                    Logger.d("Native RPC token auth succeeded");
-                    return NativeAuthResult.success();
+                try {
+                    FnosRpcClient authClient = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+                    if (authClient.authToken(session)) {
+                        Logger.d("Native RPC token auth succeeded");
+                        return NativeAuthResult.success();
+                    }
+                } catch (FnosRpcException ex) {
+                    Logger.w("Native RPC token auth failed, retrying login: " + ex.getMessage());
                 }
                 sessionStore.clear();
             }
