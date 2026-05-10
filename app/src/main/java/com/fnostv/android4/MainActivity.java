@@ -30,9 +30,9 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public final class MainActivity extends Activity {
-    private static final int SETTINGS_REQUEST = 31;
+import com.fnostv.android4.util.Constants;
 
+public final class MainActivity extends Activity {
     private FrameLayout root;
     private WebView webView;
     private ProgressBar progressBar;
@@ -79,7 +79,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == SETTINGS_REQUEST) {
+        if (requestCode == Constants.REQUEST_SETTINGS) {
             loadProfileOrSettings();
         }
     }
@@ -119,7 +119,7 @@ public final class MainActivity extends Activity {
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(3),
+                dp(Constants.PROGRESS_BAR_HEIGHT_DP),
                 Gravity.TOP);
         root.addView(progressBar, progressParams);
 
@@ -154,7 +154,7 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
             settings.setMediaPlaybackRequiresUserGesture(false);
         }
-        settings.setUserAgentString(settings.getUserAgentString() + " fnOSTV-Android4/0.1");
+        settings.setUserAgentString(settings.getUserAgentString() + Constants.USER_AGENT_SUFFIX);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
             settings.setAllowFileAccessFromFileURLs(false);
             settings.setAllowUniversalAccessFromFileURLs(false);
@@ -186,7 +186,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openSettings() {
-        startActivityForResult(new Intent(this, SettingsActivity.class), SETTINGS_REQUEST);
+        startActivityForResult(new Intent(this, SettingsActivity.class), Constants.REQUEST_SETTINGS);
     }
 
     private void showStatus(String message) {
