@@ -12,6 +12,7 @@ import com.fnostv.android4.config.ProfileValidation;
 import com.fnostv.android4.config.ProfileValidator;
 import com.fnostv.android4.config.ServerProfile;
 import com.fnostv.android4.ui.SettingsForm;
+import com.fnostv.android4.util.Constants;
 
 public final class SettingsActivity extends Activity implements SettingsForm.Listener {
     private ProfileStore store;
@@ -24,7 +25,7 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         store = new ProfileStore(this);
         settingsForm = new SettingsForm(this, this);
-        setContentView(settingsForm.create(store.load()));
+        setContentView(settingsForm.create(store.load(), getIntent().getStringExtra(Constants.EXTRA_SETTINGS_ERROR_MESSAGE)));
     }
 
     @Override

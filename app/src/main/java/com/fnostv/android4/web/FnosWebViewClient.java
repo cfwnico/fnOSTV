@@ -41,7 +41,7 @@ public final class FnosWebViewClient extends WebViewClient {
 
     @Override
     public void onPageFinished(WebView view, String url) {
-        events.onPageLoadFinished(view);
+        events.onPageLoadFinished(view, url);
         super.onPageFinished(view, url);
     }
 
@@ -52,6 +52,6 @@ public final class FnosWebViewClient extends WebViewClient {
 
     @Override
     public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-        events.onMainFrameError(description);
+        events.onMainFrameError(description, failingUrl);
     }
 }
