@@ -8,6 +8,10 @@ fnOSTV 是支持安卓 4 的旧版电视客户端。
 
 本项目采用 MIT License 开源，详见 [LICENSE](LICENSE)。开源使用、分发、贡献和发布要求见 [OPEN_SOURCE.md](OPEN_SOURCE.md)，项目声明见 [NOTICE](NOTICE)。
 
+## 发布信息
+
+当前 release 版本信息见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。
+
 ## 已实现
 
 - Android 原生 Java 工程，无 AndroidX、Kotlin、Compose 等现代运行时依赖。
