@@ -1,14 +1,14 @@
-package com.fnostv.android4;
+package com.fnostv.android4.web;
 
 import com.fnostv.android4.config.ServerProfile;
 
 import org.json.JSONObject;
 
-final class LoginScript {
+public final class LoginScript {
     private LoginScript() {
     }
 
-    static String build(ServerProfile profile) {
+    public static String build(ServerProfile profile) {
         String user = JSONObject.quote(profile.username);
         String pass = JSONObject.quote(profile.password);
         return "javascript:(function(){"
