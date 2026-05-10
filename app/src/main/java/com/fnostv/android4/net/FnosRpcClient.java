@@ -3,11 +3,14 @@ package com.fnostv.android4.net;
 import com.fnostv.android4.config.ServerProfile;
 import com.fnostv.android4.util.Logger;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -23,10 +26,13 @@ public final class FnosRpcClient {
     private static final int OPEN_TIMEOUT_SECONDS = 10;
     private static final int REQUEST_TIMEOUT_SECONDS = 15;
     private static final String BACK_ID_SEED = "0000000000000000";
+    private static final String SOCKET_MAIN = "main";
+    private static final String SOCKET_FILE = "file";
 
     private final OkHttpClient httpClient;
     private final ServerProfile profile;
     private final String deviceId;
+    private final String socketType;
     private final Map<String, PendingCall> pendingCalls = new HashMap<String, PendingCall>();
     private WebSocket webSocket;
     private CountDownLatch openLatch;
@@ -39,8 +45,13 @@ public final class FnosRpcClient {
     private byte[] loginIv;
 
     public FnosRpcClient(ServerProfile profile, String deviceId) {
+        this(profile, deviceId, SOCKET_MAIN);
+    }
+
+    private FnosRpcClient(ServerProfile profile, String deviceId, String socketType) {
         this.profile = profile;
         this.deviceId = deviceId;
+        this.socketType = socketType;
         httpClient = new OkHttpClient.Builder()
                 .readTimeout(0, TimeUnit.MILLISECONDS)
                 .connectTimeout(OPEN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -50,7 +61,7 @@ public final class FnosRpcClient {
     public void connect() throws FnosRpcException {
         openLatch = new CountDownLatch(1);
         Request request = new Request.Builder()
-                .url(webSocketUrl(profile.baseUrl))
+                .url(webSocketUrl(profile.baseUrl, socketType))
                 .header("Origin", origin(profile.baseUrl))
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 4.4.2; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0 Safari/537.36")
                 .build();
@@ -92,19 +103,17 @@ public final class FnosRpcClient {
         }
         connect();
         try {
-            loadPublicKey();
-            JSONObject request = new JSONObject();
-            request.put("req", "user.authToken");
-            request.put("token", session.token);
-            request.put("main", true);
-            request.put("si", si);
-            send(signRequest(request, session.secretHex), REQUEST_TIMEOUT_SECONDS);
+            loadSessionId(true);
+            authenticateToken(session, true);
             return true;
-        } catch (JSONException ex) {
-            throw new FnosRpcException("构造 token 验证请求失败", ex);
         } finally {
             close();
         }
+    }
+
+    public FnosFileList listDir(FnosSession session, String path) throws FnosRpcException {
+        FnosRpcClient client = new FnosRpcClient(profile, deviceId, SOCKET_FILE);
+        return client.listDirOnFileSocket(session, path);
     }
 
     public void close() {
@@ -130,18 +139,73 @@ public final class FnosRpcClient {
     }
 
     private void loadPublicKey() throws FnosRpcException {
+        loadSessionId(true);
+    }
+
+    private void loadSessionId(boolean withPublicKey) throws FnosRpcException {
         try {
             JSONObject request = new JSONObject();
-            request.put("req", "util.crypto.getRSAPub");
+            request.put("req", withPublicKey ? "util.crypto.getRSAPub" : "util.getSI");
             JSONObject response = send(request, REQUEST_TIMEOUT_SECONDS);
-            publicKey = response.optString("pub");
+            publicKey = response.optString("pub", publicKey);
             si = response.optString("si");
-            if (publicKey.length() == 0 || si.length() == 0) {
+            if ((withPublicKey && publicKey.length() == 0) || si.length() == 0) {
                 throw new FnosRpcException("fnOS RPC 握手缺少公钥或会话标识");
             }
         } catch (JSONException ex) {
             throw new FnosRpcException("构造握手请求失败", ex);
         }
+    }
+
+    private void authenticateToken(FnosSession session, boolean main) throws FnosRpcException {
+        try {
+            JSONObject request = new JSONObject();
+            request.put("req", "user.authToken");
+            request.put("token", session.token);
+            if (main) {
+                request.put("main", true);
+            }
+            request.put("si", si);
+            send(signRequest(request, session.secretHex), REQUEST_TIMEOUT_SECONDS);
+        } catch (JSONException ex) {
+            throw new FnosRpcException("构造 token 验证请求失败", ex);
+        }
+    }
+
+    private FnosFileList listDirOnFileSocket(FnosSession session, String path) throws FnosRpcException {
+        connect();
+        try {
+            loadSessionId(false);
+            authenticateToken(session, false);
+            JSONObject request = new JSONObject();
+            request.put("req", "file.lsDir");
+            if (path != null && path.length() > 0) {
+                request.put("path", path);
+            }
+            JSONObject response = send(signRequest(request, session.secretHex), REQUEST_TIMEOUT_SECONDS);
+            return parseFileList(path, session.uid, response);
+        } catch (JSONException ex) {
+            throw new FnosRpcException("构造目录列表请求失败", ex);
+        } finally {
+            close();
+        }
+    }
+
+    private FnosFileList parseFileList(String path, String uid, JSONObject response) {
+        List<FnosFileEntry> entries = new ArrayList<FnosFileEntry>();
+        JSONArray files = response.optJSONArray("files");
+        if (files == null) {
+            files = response.optJSONArray("data");
+        }
+        if (files != null) {
+            for (int i = 0; i < files.length(); i++) {
+                JSONObject file = files.optJSONObject(i);
+                if (file != null) {
+                    entries.add(FnosFileEntry.fromJson(file, path, uid));
+                }
+            }
+        }
+        return new FnosFileList(path, entries);
     }
 
     private JSONObject loginPayload(String reqId) throws FnosRpcException {
@@ -247,14 +311,14 @@ public final class FnosRpcClient {
         return builder.toString();
     }
 
-    private String webSocketUrl(String baseUrl) {
+    private String webSocketUrl(String baseUrl, String type) {
         String url = baseUrl;
         if (url.startsWith("https://")) {
             url = "wss://" + url.substring("https://".length());
         } else if (url.startsWith("http://")) {
             url = "ws://" + url.substring("http://".length());
         }
-        return url + "/websocket?type=main";
+        return url + "/websocket?type=" + type;
     }
 
     private String origin(String baseUrl) {
@@ -288,10 +352,18 @@ public final class FnosRpcClient {
                 }
                 PendingCall call;
                 synchronized (pendingCalls) {
-                    call = pendingCalls.remove(reqId);
+                    call = pendingCalls.get(reqId);
                 }
                 if (call != null) {
-                    call.complete(message);
+                    String result = message.optString("result");
+                    if (result.length() > 0 && !"doing".equals(result)) {
+                        synchronized (pendingCalls) {
+                            pendingCalls.remove(reqId);
+                        }
+                        call.complete(message);
+                    } else {
+                        call.update(message);
+                    }
                 }
             } catch (JSONException ex) {
                 Logger.w("RPC message parse failed: " + ex.getMessage());
@@ -320,12 +392,33 @@ public final class FnosRpcClient {
 
     private static final class PendingCall {
         private final CountDownLatch latch = new CountDownLatch(1);
+        private final JSONArray partialFiles = new JSONArray();
         private JSONObject response;
         private FnosRpcException error;
 
+        void update(JSONObject value) {
+            appendFiles(value.optJSONArray("files"));
+        }
+
         void complete(JSONObject value) {
+            appendFiles(value.optJSONArray("files"));
+            if (partialFiles.length() > 0 && !value.has("files")) {
+                try {
+                    value.put("files", partialFiles);
+                } catch (JSONException ignored) {
+                }
+            }
             response = value;
             latch.countDown();
+        }
+
+        private void appendFiles(JSONArray files) {
+            if (files == null) {
+                return;
+            }
+            for (int i = 0; i < files.length(); i++) {
+                partialFiles.put(files.opt(i));
+            }
         }
 
         void fail(FnosRpcException value) {

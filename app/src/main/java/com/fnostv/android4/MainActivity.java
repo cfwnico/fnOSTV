@@ -23,12 +23,15 @@ import android.widget.ProgressBar;
 
 import com.fnostv.android4.config.ProfileStore;
 import com.fnostv.android4.config.ServerProfile;
+import com.fnostv.android4.net.FnosFileEntry;
+import com.fnostv.android4.net.FnosFileList;
 import com.fnostv.android4.net.FnosRpcClient;
 import com.fnostv.android4.net.FnosRpcException;
 import com.fnostv.android4.net.FnosSession;
 import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
+import com.fnostv.android4.ui.NativeFileBrowserView;
 import com.fnostv.android4.ui.NativeHomeView;
 import com.fnostv.android4.ui.StatusOverlay;
 import com.fnostv.android4.util.Constants;
@@ -41,10 +44,11 @@ import com.fnostv.android4.web.LoginScript;
 import com.fnostv.android4.web.WebViewConfigurator;
 import com.fnostv.android4.web.WebViewEvents;
 
-public final class MainActivity extends Activity implements WebViewEvents, RemoteActions, NativeHomeView.Listener {
+public final class MainActivity extends Activity implements WebViewEvents, RemoteActions, NativeHomeView.Listener, NativeFileBrowserView.Listener {
     private FrameLayout root;
     private WebView webView;
     private NativeHomeView nativeHomeView;
+    private NativeFileBrowserView fileBrowserView;
     private ProgressBar progressBar;
     private StatusOverlay statusOverlay;
     private FullscreenVideoController fullscreenVideoController;
@@ -54,6 +58,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private ServerProfile profile;
     private boolean settingsOpen;
     private boolean nativeAuthRunning;
+    private String currentFilePath = "";
     private final Handler loadTimeoutHandler = new Handler();
     private final Runnable loadTimeoutRunnable = new Runnable() {
         @Override
@@ -140,6 +145,10 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         root.addView(nativeHomeView.create(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        fileBrowserView = new NativeFileBrowserView(this, this);
+        root.addView(fileBrowserView.create(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
@@ -164,6 +173,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private void loadProfileOrSettings() {
         profile = store.load();
         nativeHomeView.hide();
+        fileBrowserView.hide();
         if (!profile.isReady()) {
             showStatus("首次使用请配置飞牛服务地址");
             openSettings();
@@ -252,6 +262,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         progressBar.setVisibility(View.GONE);
         statusOverlay.hide();
         webView.setVisibility(View.GONE);
+        fileBrowserView.hide();
         nativeHomeView.show();
     }
 
@@ -262,7 +273,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return;
         }
         if (NativeHomeView.ACTION_FILES.equals(action)) {
-            showStatus("文件库正在接入 file.lsDir");
+            openFileBrowser("");
             return;
         }
         if (NativeHomeView.ACTION_MEDIA.equals(action)) {
@@ -273,9 +284,26 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     @Override
+    public void onFileEntrySelected(FnosFileEntry entry) {
+        if (entry.directory) {
+            openFileBrowser(entry.path);
+            return;
+        }
+        showStatus("播放能力正在接入\n" + entry.name);
+    }
+
+    @Override
     public boolean goBack() {
         if (fullscreenVideoController.isShowing()) {
             fullscreenVideoController.hide();
+            return true;
+        }
+        if (fileBrowserView.isVisible()) {
+            if (currentFilePath.length() == 0) {
+                showNativeHome();
+            } else {
+                openFileBrowser(parentPath(currentFilePath));
+            }
             return true;
         }
         if (webView.canGoBack()) {
@@ -293,6 +321,53 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private void showStatus(String message) {
         statusOverlay.show(message);
+    }
+
+    private void openFileBrowser(final String path) {
+        currentFilePath = path == null ? "" : path;
+        nativeHomeView.hide();
+        webView.setVisibility(View.GONE);
+        showStatus("正在加载目录...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final FileLoadResult result = loadFileList(currentFilePath);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (result.success) {
+                            statusOverlay.hide();
+                            fileBrowserView.show(result.list.path, result.list.entries);
+                        } else {
+                            showStatus(result.message);
+                            nativeHomeView.show();
+                        }
+                    }
+                });
+            }
+        }, "fnos-file-list").start();
+    }
+
+    private FileLoadResult loadFileList(String path) {
+        try {
+            FnosSession session = sessionStore.load();
+            if (!session.hasToken()) {
+                return FileLoadResult.failure("登录会话已失效");
+            }
+            FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+            return FileLoadResult.success(client.listDir(session, path));
+        } catch (FnosRpcException ex) {
+            Logger.w("Native file list failed: " + ex.getMessage());
+            return FileLoadResult.failure("文件库加载失败：" + ex.getMessage());
+        } catch (RuntimeException ex) {
+            Logger.w("Native file list crashed: " + ex.getMessage());
+            return FileLoadResult.failure("文件库加载异常：" + ex.getMessage());
+        }
+    }
+
+    private String parentPath(String path) {
+        int index = path == null ? -1 : path.lastIndexOf('/');
+        return index > 0 ? path.substring(0, index) : "";
     }
 
     private void enterFullScreen() {
@@ -482,6 +557,26 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
         static NativeAuthResult failure(String message) {
             return new NativeAuthResult(false, message);
+        }
+    }
+
+    private static final class FileLoadResult {
+        final boolean success;
+        final FnosFileList list;
+        final String message;
+
+        private FileLoadResult(boolean success, FnosFileList list, String message) {
+            this.success = success;
+            this.list = list;
+            this.message = message;
+        }
+
+        static FileLoadResult success(FnosFileList list) {
+            return new FileLoadResult(true, list, "");
+        }
+
+        static FileLoadResult failure(String message) {
+            return new FileLoadResult(false, null, message);
         }
     }
 }
