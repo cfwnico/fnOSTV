@@ -22,6 +22,7 @@ import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosPlaybackSource;
 import com.fnostv.android4.player.IjkPlayerEngine;
 import com.fnostv.android4.player.PlayerEngine;
+import com.fnostv.android4.player.VlcPlayerEngine;
 import com.fnostv.android4.util.Logger;
 
 import java.util.ArrayList;
@@ -68,6 +69,7 @@ public final class NativeVideoPlayerView {
     private boolean prepared;
     private boolean preferHardwareCodec;
     private boolean retriedSoftwareCodec;
+    private boolean retriedIjkEngine;
     private int bufferingCount;
     private int speedIndex;
     private int sourceIndex;
@@ -252,6 +254,7 @@ public final class NativeVideoPlayerView {
         prepared = false;
         preferHardwareCodec = entry != null && entry.prefersHardwarePlayback();
         retriedSoftwareCodec = false;
+        retriedIjkEngine = false;
         bufferingCount = 0;
         speedIndex = 0;
         videoWidth = 0;
@@ -442,16 +445,35 @@ public final class NativeVideoPlayerView {
     }
 
     private PlayerEngine createPlayerEngine() {
-        return new IjkPlayerEngine();
+        if (retriedIjkEngine) {
+            return new IjkPlayerEngine();
+        }
+        return new VlcPlayerEngine(context);
     }
 
     private void retryWithSoftwareCodec(String reason) {
-        Logger.w("IJK retry software file=" + fileName() + " reason=" + reason);
+        Logger.w(engineName() + " retry software file=" + fileName() + " reason=" + reason);
         retriedSoftwareCodec = true;
         preferHardwareCodec = false;
         prepared = false;
         loadingView.setVisibility(View.VISIBLE);
         showHint(reason);
+        releasePlayer(true);
+        if (surfaceReady) {
+            startPlayer();
+        }
+        handler.removeCallbacks(prepareTimeoutRunnable);
+        handler.postDelayed(prepareTimeoutRunnable, PREPARE_TIMEOUT_MS);
+    }
+
+    private void retryWithIjkEngine(String reason) {
+        Logger.w("VLC fallback to IJK file=" + fileName() + " reason=" + reason);
+        retriedIjkEngine = true;
+        retriedSoftwareCodec = false;
+        preferHardwareCodec = currentEntry != null && currentEntry.prefersHardwarePlayback();
+        prepared = false;
+        loadingView.setVisibility(View.VISIBLE);
+        showHint("VLC播放失败，切换兼容播放器");
         releasePlayer(true);
         if (surfaceReady) {
             startPlayer();
@@ -478,11 +500,15 @@ public final class NativeVideoPlayerView {
 
     private void notifyPlaybackError(String reason) {
         handler.removeCallbacks(prepareTimeoutRunnable);
-        Logger.w("IJK playback error file=" + fileName() + " format=" + formatLabel()
+        Logger.w(engineName() + " playback error file=" + fileName() + " format=" + formatLabel()
                 + " hw=" + preferHardwareCodec
                 + " source=" + currentSource().label
                 + " reason=" + reason);
-        if (preferHardwareCodec && !retriedSoftwareCodec) {
+        if (!retriedIjkEngine && !"IJK".equals(engineName())) {
+            retryWithIjkEngine(reason);
+            return;
+        }
+        if ("IJK".equals(engineName()) && preferHardwareCodec && !retriedSoftwareCodec) {
             retryWithSoftwareCodec("硬解失败，切换软解");
             return;
         }
@@ -505,6 +531,10 @@ public final class NativeVideoPlayerView {
 
     private String formatLabel() {
         return currentEntry == null ? "video" : currentEntry.formatLabel();
+    }
+
+    private String engineName() {
+        return currentPlayer == null ? "Player" : currentPlayer.name();
     }
 
     private String redactedUrl(String url) {
@@ -584,6 +614,7 @@ public final class NativeVideoPlayerView {
         pendingSeekMs = savedPosition;
         prepared = false;
         retriedSoftwareCodec = false;
+        retriedIjkEngine = false;
         preferHardwareCodec = currentEntry != null && currentEntry.prefersHardwarePlayback();
         videoWidth = 0;
         videoHeight = 0;
