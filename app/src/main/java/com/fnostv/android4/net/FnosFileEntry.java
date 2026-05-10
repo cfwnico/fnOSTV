@@ -66,6 +66,18 @@ public final class FnosFileEntry {
         return isVideo();
     }
 
+    public boolean prefersHardwarePlayback() {
+        String value = extension();
+        return value.equals("mp4")
+                || value.equals("m4v")
+                || value.equals("mov")
+                || value.equals("3gp")
+                || value.equals("3gpp")
+                || value.equals("m3u8")
+                || value.equals("ts")
+                || value.equals("m2ts");
+    }
+
     public String playbackUrl() {
         if (mediaUrl.length() > 0) {
             return mediaUrl;

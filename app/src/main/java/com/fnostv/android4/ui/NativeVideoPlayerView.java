@@ -19,6 +19,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import com.fnostv.android4.net.FnosFileEntry;
+import com.fnostv.android4.util.Logger;
 
 import java.lang.reflect.Method;
 import java.util.Locale;
@@ -64,6 +65,9 @@ public final class NativeVideoPlayerView {
     private boolean dragging;
     private boolean suppressErrors;
     private boolean prepared;
+    private boolean preferHardwareCodec;
+    private boolean retriedSoftwareCodec;
+    private int bufferingCount;
     private int speedIndex;
     private int pictureMode = MODE_FILL;
     private int videoWidth;
@@ -226,6 +230,9 @@ public final class NativeVideoPlayerView {
         currentUrl = url == null ? "" : url;
         suppressErrors = false;
         prepared = false;
+        preferHardwareCodec = entry != null && entry.prefersHardwarePlayback();
+        retriedSoftwareCodec = false;
+        bufferingCount = 0;
         titleView.setText(entry == null ? "" : entry.name);
         loadingView.setVisibility(View.VISIBLE);
         view.setVisibility(View.VISIBLE);
@@ -325,7 +332,7 @@ public final class NativeVideoPlayerView {
         try {
             ensureIjkLoaded();
             IjkMediaPlayer player = new IjkMediaPlayer();
-            configurePlayer(player);
+            configurePlayer(player, preferHardwareCodec);
             currentPlayer = player;
             player.setDisplay(surfaceHolder);
             player.setOnPreparedListener(new IMediaPlayer.OnPreparedListener() {
@@ -338,6 +345,10 @@ public final class NativeVideoPlayerView {
                     videoView.setVideoSize(videoWidth, videoHeight);
                     loadingView.setVisibility(View.GONE);
                     mediaPlayer.start();
+                    Logger.d("IJK prepared file=" + fileName() + " format=" + formatLabel()
+                            + " hw=" + preferHardwareCodec
+                            + " size=" + videoWidth + "x" + videoHeight
+                            + " duration=" + mediaPlayer.getDuration());
                     updateProgress();
                     updateControlText();
                     showControlsTemporarily();
@@ -363,8 +374,17 @@ public final class NativeVideoPlayerView {
                     return true;
                 }
             });
+            player.setOnInfoListener(new IMediaPlayer.OnInfoListener() {
+                @Override
+                public boolean onInfo(IMediaPlayer mediaPlayer, int what, int extra) {
+                    handlePlayerInfo(what, extra);
+                    return false;
+                }
+            });
             player.setDataSource(currentUrl);
             player.prepareAsync();
+            Logger.d("IJK preparing file=" + fileName() + " format=" + formatLabel()
+                    + " hw=" + preferHardwareCodec + " url=" + redactedUrl(currentUrl));
         } catch (Exception ex) {
             loadingView.setVisibility(View.GONE);
             notifyPlaybackError("播放器初始化失败：" + ex.getMessage());
@@ -378,12 +398,63 @@ public final class NativeVideoPlayerView {
         }
     }
 
-    private void configurePlayer(IjkMediaPlayer player) {
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 0);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1);
+    private void configurePlayer(IjkMediaPlayer player, boolean hardwareCodec) {
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", hardwareCodec ? 1 : 0);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", hardwareCodec ? 1 : 5);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 4 * 1024 * 1024);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 2);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 30000);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 0);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzemaxduration", 100L);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32 * 1024L);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "fastseek");
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
+    }
+
+    private void retryWithSoftwareCodec(String reason) {
+        Logger.w("IJK retry software file=" + fileName() + " reason=" + reason);
+        retriedSoftwareCodec = true;
+        preferHardwareCodec = false;
+        prepared = false;
+        loadingView.setVisibility(View.VISIBLE);
+        showHint(reason);
+        releasePlayer(true);
+        if (surfaceReady) {
+            startPlayer();
+        }
+        handler.removeCallbacks(prepareTimeoutRunnable);
+        handler.postDelayed(prepareTimeoutRunnable, PREPARE_TIMEOUT_MS);
+    }
+
+    private void handlePlayerInfo(int what, int extra) {
+        if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_START) {
+            bufferingCount++;
+            loadingView.setVisibility(View.VISIBLE);
+            Logger.w("IJK buffering start file=" + fileName()
+                    + " count=" + bufferingCount
+                    + " pos=" + position()
+                    + " extra=" + extra);
+            return;
+        }
+        if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_END) {
+            loadingView.setVisibility(View.GONE);
+            Logger.d("IJK buffering end file=" + fileName()
+                    + " pos=" + position()
+                    + " extra=" + extra);
+            return;
+        }
+        if (what == IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+            Logger.d("IJK first frame file=" + fileName() + " pos=" + position());
+            return;
+        }
+        Logger.d("IJK info what=" + what + " extra=" + extra + " file=" + fileName());
     }
 
     private void releasePlayer(boolean clearCurrent) {
@@ -408,9 +479,31 @@ public final class NativeVideoPlayerView {
 
     private void notifyPlaybackError(String reason) {
         handler.removeCallbacks(prepareTimeoutRunnable);
+        Logger.w("IJK playback error file=" + fileName() + " format=" + formatLabel()
+                + " hw=" + preferHardwareCodec + " reason=" + reason);
+        if (preferHardwareCodec && !retriedSoftwareCodec) {
+            retryWithSoftwareCodec("硬解失败，切换软解");
+            return;
+        }
         suppressErrors = true;
         releasePlayer(true);
         listener.onNativeVideoError(currentEntry, currentUrl, reason);
+    }
+
+    private String fileName() {
+        return currentEntry == null ? "" : currentEntry.name;
+    }
+
+    private String formatLabel() {
+        return currentEntry == null ? "video" : currentEntry.formatLabel();
+    }
+
+    private String redactedUrl(String url) {
+        if (url == null || url.length() == 0) {
+            return "";
+        }
+        int query = url.indexOf('?');
+        return query < 0 ? url : url.substring(0, query) + "?...";
     }
 
     private TextView controlText(String text) {
