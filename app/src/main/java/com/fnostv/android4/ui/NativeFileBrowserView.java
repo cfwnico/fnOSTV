@@ -14,6 +14,8 @@ import android.widget.TextView;
 import com.fnostv.android4.net.FnosFileEntry;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 public final class NativeFileBrowserView {
@@ -26,6 +28,7 @@ public final class NativeFileBrowserView {
     private final EntryAdapter adapter = new EntryAdapter();
     private LinearLayout view;
     private TextView pathView;
+    private TextView emptyView;
     private ListView listView;
 
     public NativeFileBrowserView(Context context, Listener listener) {
@@ -71,7 +74,18 @@ public final class NativeFileBrowserView {
                 listener.onFileEntrySelected(adapter.getItem(position));
             }
         });
+        emptyView = new TextView(context);
+        emptyView.setText("目录为空");
+        emptyView.setTextColor(0xFFB8C7D9);
+        emptyView.setTextSize(18);
+        emptyView.setGravity(Gravity.CENTER);
+        emptyView.setVisibility(View.GONE);
+        listView.setEmptyView(emptyView);
         view.addView(listView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1));
+        view.addView(emptyView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0,
                 1));
@@ -113,6 +127,15 @@ public final class NativeFileBrowserView {
             entries.clear();
             if (values != null) {
                 entries.addAll(values);
+                Collections.sort(entries, new Comparator<FnosFileEntry>() {
+                    @Override
+                    public int compare(FnosFileEntry left, FnosFileEntry right) {
+                        if (left.directory != right.directory) {
+                            return left.directory ? -1 : 1;
+                        }
+                        return left.name.compareToIgnoreCase(right.name);
+                    }
+                });
             }
             notifyDataSetChanged();
         }
@@ -136,8 +159,32 @@ public final class NativeFileBrowserView {
         public View getView(int position, View convertView, ViewGroup parent) {
             TextView row = convertView instanceof TextView ? (TextView) convertView : rowView();
             FnosFileEntry entry = getItem(position);
-            row.setText((entry.directory ? "[目录] " : "[文件] ") + entry.name);
+            row.setText(labelFor(entry));
             return row;
+        }
+
+        private String labelFor(FnosFileEntry entry) {
+            if (entry.directory) {
+                return "[目录] " + entry.name;
+            }
+            String size = formatSize(entry.size);
+            return size.length() == 0 ? "[文件] " + entry.name : "[文件] " + entry.name + "    " + size;
+        }
+
+        private String formatSize(long size) {
+            if (size <= 0L) {
+                return "";
+            }
+            if (size >= 1024L * 1024L * 1024L) {
+                return String.format("%.1f GB", size / 1024.0 / 1024.0 / 1024.0);
+            }
+            if (size >= 1024L * 1024L) {
+                return String.format("%.1f MB", size / 1024.0 / 1024.0);
+            }
+            if (size >= 1024L) {
+                return String.format("%.1f KB", size / 1024.0);
+            }
+            return size + " B";
         }
 
         private TextView rowView() {
