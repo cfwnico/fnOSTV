@@ -8,6 +8,10 @@ fnOSTV 是支持安卓 4 的旧版电视客户端。
 
 本项目采用 MIT License 开源，详见 [LICENSE](LICENSE)。开源使用、分发、贡献和发布要求见 [OPEN_SOURCE.md](OPEN_SOURCE.md)，项目声明见 [NOTICE](NOTICE)。
 
+## 发布信息
+
+当前 release 版本信息见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。
+
 ## 已实现
 
 - Android 原生 Java 工程，无 AndroidX、Kotlin、Compose 等现代运行时依赖。
@@ -22,6 +26,21 @@ fnOSTV 是支持安卓 4 的旧版电视客户端。
 - 支持 WebChromeClient 全屏视频。
 - SSL 证书异常时弹窗确认；也可以在设置里信任该服务器证书异常。
 - 非 HTTP 链接和下载链接交给系统应用处理。
+
+## 架构
+
+代码按 Android 4 兼容目标拆分为几层：
+
+```text
+com.fnostv.android4
+├── config  服务器配置、校验和本地存储
+├── tv      遥控器按键分发
+├── ui      状态遮罩和设置表单
+├── util    常量和日志
+└── web     WebView 配置、客户端回调、登录注入和全屏视频
+```
+
+`MainActivity` 只负责生命周期、页面装配和动作协调；`SettingsActivity` 只负责设置页流程。WebView、遥控器、配置校验和 UI 表单都拆为独立类，方便后续按模块 review 和维护。
 
 ## 与参考 Electron 版的映射
 
