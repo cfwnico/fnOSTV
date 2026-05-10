@@ -19,9 +19,12 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import com.fnostv.android4.net.FnosFileEntry;
+import com.fnostv.android4.net.FnosPlaybackSource;
 import com.fnostv.android4.util.Logger;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -45,6 +48,7 @@ public final class NativeVideoPlayerView {
     private final Context context;
     private final Listener listener;
     private final Handler handler = new Handler();
+    private final List<FnosPlaybackSource> playbackSources = new ArrayList<FnosPlaybackSource>();
     private FrameLayout view;
     private PlaybackSurfaceView videoView;
     private ProgressBar loadingView;
@@ -69,9 +73,12 @@ public final class NativeVideoPlayerView {
     private boolean retriedSoftwareCodec;
     private int bufferingCount;
     private int speedIndex;
+    private int sourceIndex;
+    private int pendingSeekMs = -1;
     private int pictureMode = MODE_FILL;
     private int videoWidth;
     private int videoHeight;
+
     private final Runnable progressRunnable = new Runnable() {
         @Override
         public void run() {
@@ -145,11 +152,10 @@ public final class NativeVideoPlayerView {
         titleView.setSingleLine(true);
         titleView.setBackgroundColor(0x99000000);
         titleView.setPadding(dp(18), dp(10), dp(18), dp(10));
-        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(
+        view.addView(titleView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP);
-        view.addView(titleView, titleParams);
+                Gravity.TOP));
 
         controlBar = new LinearLayout(context);
         controlBar.setOrientation(LinearLayout.VERTICAL);
@@ -159,12 +165,11 @@ public final class NativeVideoPlayerView {
         LinearLayout controlRow = new LinearLayout(context);
         controlRow.setOrientation(LinearLayout.HORIZONTAL);
         controlRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        playStateView = controlText("暂停/播放");
+        playStateView = controlText("播放/暂停");
         timeView = controlText("00:00 / 00:00");
         speedView = controlText("倍速 1.0x");
         pictureView = controlText("画面 铺满");
-        resolutionView = controlText("分辨率 原画");
+        resolutionView = controlText("清晰度 原画");
         controlRow.addView(playStateView);
         controlRow.addView(timeView);
         controlRow.addView(speedView);
@@ -199,7 +204,7 @@ public final class NativeVideoPlayerView {
         hintView.setTextColor(0xFFE6EDF3);
         hintView.setTextSize(13);
         hintView.setSingleLine(true);
-        hintView.setText("左右键快退/快进，确认键暂停，菜单键倍速，上键切换画面");
+        hintView.setText("左右快退/快进，确认暂停，菜单倍速，上键画面，下键清晰度");
 
         controlBar.addView(controlRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -210,37 +215,55 @@ public final class NativeVideoPlayerView {
         controlBar.addView(hintView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
-        FrameLayout.LayoutParams controlParams = new FrameLayout.LayoutParams(
+        view.addView(controlBar, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM);
-        view.addView(controlBar, controlParams);
+                Gravity.BOTTOM));
 
         loadingView = new ProgressBar(context);
-        FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(
+        view.addView(loadingView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER);
-        view.addView(loadingView, loadingParams);
+                Gravity.CENTER));
         return view;
     }
 
     public void play(FnosFileEntry entry, String url) {
+        List<FnosPlaybackSource> sources = new ArrayList<FnosPlaybackSource>();
+        sources.add(new FnosPlaybackSource("原画", url));
+        play(entry, sources);
+    }
+
+    public void play(FnosFileEntry entry, List<FnosPlaybackSource> sources) {
         currentEntry = entry;
-        currentUrl = url == null ? "" : url;
+        playbackSources.clear();
+        if (sources != null) {
+            for (int i = 0; i < sources.size(); i++) {
+                FnosPlaybackSource source = sources.get(i);
+                if (source != null && source.isValid()) {
+                    playbackSources.add(source);
+                }
+            }
+        }
+        if (playbackSources.size() == 0) {
+            playbackSources.add(new FnosPlaybackSource("原画", ""));
+        }
+        sourceIndex = 0;
+        currentUrl = currentSource().url;
+        pendingSeekMs = -1;
         suppressErrors = false;
         prepared = false;
         preferHardwareCodec = entry != null && entry.prefersHardwarePlayback();
         retriedSoftwareCodec = false;
         bufferingCount = 0;
+        speedIndex = 0;
+        videoWidth = 0;
+        videoHeight = 0;
         titleView.setText(entry == null ? "" : entry.name);
         loadingView.setVisibility(View.VISIBLE);
         view.setVisibility(View.VISIBLE);
         view.setKeepScreenOn(true);
         enterImmersiveMode();
-        speedIndex = 0;
-        videoWidth = 0;
-        videoHeight = 0;
         videoView.setResizeMode(pictureMode);
         releasePlayer(false);
         if (surfaceReady) {
@@ -250,6 +273,7 @@ public final class NativeVideoPlayerView {
         handler.post(progressRunnable);
         handler.removeCallbacks(prepareTimeoutRunnable);
         handler.postDelayed(prepareTimeoutRunnable, PREPARE_TIMEOUT_MS);
+        updateControlText();
         showControlsTemporarily();
     }
 
@@ -298,7 +322,7 @@ public final class NativeVideoPlayerView {
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            hideControls();
+            cycleQuality();
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_MENU) {
@@ -322,6 +346,9 @@ public final class NativeVideoPlayerView {
         view.setKeepScreenOn(false);
         currentEntry = null;
         currentUrl = "";
+        playbackSources.clear();
+        sourceIndex = 0;
+        pendingSeekMs = -1;
         prepared = false;
     }
 
@@ -345,8 +372,14 @@ public final class NativeVideoPlayerView {
                     videoView.setVideoSize(videoWidth, videoHeight);
                     loadingView.setVisibility(View.GONE);
                     mediaPlayer.start();
+                    if (pendingSeekMs > 0) {
+                        mediaPlayer.seekTo(pendingSeekMs);
+                        pendingSeekMs = -1;
+                    }
+                    applyPlaybackSpeed(SPEEDS[speedIndex]);
                     Logger.d("IJK prepared file=" + fileName() + " format=" + formatLabel()
                             + " hw=" + preferHardwareCodec
+                            + " source=" + currentSource().label
                             + " size=" + videoWidth + "x" + videoHeight
                             + " duration=" + mediaPlayer.getDuration());
                     updateProgress();
@@ -384,7 +417,9 @@ public final class NativeVideoPlayerView {
             player.setDataSource(currentUrl);
             player.prepareAsync();
             Logger.d("IJK preparing file=" + fileName() + " format=" + formatLabel()
-                    + " hw=" + preferHardwareCodec + " url=" + redactedUrl(currentUrl));
+                    + " hw=" + preferHardwareCodec
+                    + " source=" + currentSource().label
+                    + " url=" + redactedUrl(currentUrl));
         } catch (Exception ex) {
             loadingView.setVisibility(View.GONE);
             notifyPlaybackError("播放器初始化失败：" + ex.getMessage());
@@ -439,6 +474,7 @@ public final class NativeVideoPlayerView {
             loadingView.setVisibility(View.VISIBLE);
             Logger.w("IJK buffering start file=" + fileName()
                     + " count=" + bufferingCount
+                    + " source=" + currentSource().label
                     + " pos=" + position()
                     + " extra=" + extra);
             return;
@@ -446,12 +482,15 @@ public final class NativeVideoPlayerView {
         if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_END) {
             loadingView.setVisibility(View.GONE);
             Logger.d("IJK buffering end file=" + fileName()
+                    + " source=" + currentSource().label
                     + " pos=" + position()
                     + " extra=" + extra);
             return;
         }
         if (what == IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
-            Logger.d("IJK first frame file=" + fileName() + " pos=" + position());
+            Logger.d("IJK first frame file=" + fileName()
+                    + " source=" + currentSource().label
+                    + " pos=" + position());
             return;
         }
         Logger.d("IJK info what=" + what + " extra=" + extra + " file=" + fileName());
@@ -470,17 +509,15 @@ public final class NativeVideoPlayerView {
             currentPlayer.release();
         } catch (RuntimeException ignored) {
         }
-        if (clearCurrent) {
-            currentPlayer = null;
-        } else {
-            currentPlayer = null;
-        }
+        currentPlayer = null;
     }
 
     private void notifyPlaybackError(String reason) {
         handler.removeCallbacks(prepareTimeoutRunnable);
         Logger.w("IJK playback error file=" + fileName() + " format=" + formatLabel()
-                + " hw=" + preferHardwareCodec + " reason=" + reason);
+                + " hw=" + preferHardwareCodec
+                + " source=" + currentSource().label
+                + " reason=" + reason);
         if (preferHardwareCodec && !retriedSoftwareCodec) {
             retryWithSoftwareCodec("硬解失败，切换软解");
             return;
@@ -488,6 +525,14 @@ public final class NativeVideoPlayerView {
         suppressErrors = true;
         releasePlayer(true);
         listener.onNativeVideoError(currentEntry, currentUrl, reason);
+    }
+
+    private FnosPlaybackSource currentSource() {
+        if (playbackSources.size() == 0) {
+            return new FnosPlaybackSource("原画", currentUrl);
+        }
+        int index = Math.max(0, Math.min(sourceIndex, playbackSources.size() - 1));
+        return playbackSources.get(index);
     }
 
     private String fileName() {
@@ -572,6 +617,33 @@ public final class NativeVideoPlayerView {
         showControlsTemporarily();
     }
 
+    private void cycleQuality() {
+        if (playbackSources.size() <= 1) {
+            showHint("当前视频没有多码率播放源");
+            showControlsTemporarily();
+            return;
+        }
+        int savedPosition = position();
+        sourceIndex = (sourceIndex + 1) % playbackSources.size();
+        currentUrl = currentSource().url;
+        pendingSeekMs = savedPosition;
+        prepared = false;
+        retriedSoftwareCodec = false;
+        preferHardwareCodec = currentEntry != null && currentEntry.prefersHardwarePlayback();
+        videoWidth = 0;
+        videoHeight = 0;
+        loadingView.setVisibility(View.VISIBLE);
+        showHint("切换清晰度 " + currentSource().label);
+        releasePlayer(true);
+        if (surfaceReady) {
+            startPlayer();
+        }
+        handler.removeCallbacks(prepareTimeoutRunnable);
+        handler.postDelayed(prepareTimeoutRunnable, PREPARE_TIMEOUT_MS);
+        updateControlText();
+        showControlsTemporarily();
+    }
+
     private void updateProgress() {
         if (!isVisible() || dragging) {
             return;
@@ -595,11 +667,11 @@ public final class NativeVideoPlayerView {
         playStateView.setText(currentPlayer != null && currentPlayer.isPlaying() ? "播放中" : "已暂停");
         speedView.setText("倍速 " + formatSpeed(SPEEDS[speedIndex]));
         pictureView.setText(pictureMode == MODE_FILL ? "画面 铺满" : "画面 适应");
+        String label = "清晰度 " + currentSource().label;
         if (videoWidth > 0 && videoHeight > 0) {
-            resolutionView.setText("分辨率 " + videoWidth + "x" + videoHeight);
-        } else {
-            resolutionView.setText("分辨率 原画");
+            label += " · " + videoWidth + "x" + videoHeight;
         }
+        resolutionView.setText(label);
     }
 
     private int duration() {
