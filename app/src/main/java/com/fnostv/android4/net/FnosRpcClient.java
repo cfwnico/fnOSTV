@@ -57,7 +57,20 @@ public final class FnosRpcClient {
         connect();
         try {
             loadPublicKey();
-            JSONObject response = send(encryptForLogin(loginPayload()), REQUEST_TIMEOUT_SECONDS);
+            JSONObject payload = loginPayload();
+            String reqId = nextReqId();
+            try {
+                payload.put("reqid", reqId);
+            } catch (JSONException ex) {
+                throw new FnosRpcException("构造登录请求编号失败", ex);
+            }
+            JSONObject encrypted = encryptForLogin(payload);
+            try {
+                encrypted.put("reqid", reqId);
+            } catch (JSONException ex) {
+                throw new FnosRpcException("构造加密登录请求编号失败", ex);
+            }
+            JSONObject response = sendEncrypted(reqId, encrypted, REQUEST_TIMEOUT_SECONDS);
             String secretHex = response.optString("secret");
             if (secretHex.length() > 0) {
                 secretHex = FnosCrypto.aesDecryptUtf8(secretHex, loginAesKey, loginIv);
@@ -142,9 +155,9 @@ public final class FnosRpcClient {
             request.put("req", "user.login");
             request.put("user", profile.username);
             request.put("password", profile.password);
-            request.put("stay", false);
-            request.put("deviceType", "TV");
-            request.put("deviceName", "Android-TV");
+            request.put("stay", 0);
+            request.put("deviceType", "Browser");
+            request.put("deviceName", "Android-TV WebView");
             request.put("did", deviceId);
             request.put("si", si);
             return request;
@@ -211,6 +224,15 @@ public final class FnosRpcClient {
         return call.await(reqId, timeoutSeconds);
     }
 
+    private JSONObject sendEncrypted(String reqId, JSONObject encrypted, int timeoutSeconds) throws FnosRpcException {
+        PendingCall call = new PendingCall();
+        synchronized (pendingCalls) {
+            pendingCalls.put(reqId, call);
+        }
+        webSocket.send(encrypted.toString());
+        return call.await(reqId, timeoutSeconds);
+    }
+
     private String nextReqId() {
         long seconds = System.currentTimeMillis() / 1000L;
         requestId = (requestId + 1) & 0xFFFF;
@@ -248,6 +270,10 @@ public final class FnosRpcClient {
                 if ("pong".equals(message.optString("res"))) {
                     return;
                 }
+                Logger.d("RPC message reqid=" + message.optString("reqid")
+                        + " result=" + message.optString("result")
+                        + " errno=" + message.optString("errno")
+                        + " keys=" + message.names());
                 if (message.has("backId")) {
                     backId = message.optString("backId", backId);
                 }
@@ -312,10 +338,13 @@ public final class FnosRpcClient {
             if (response == null) {
                 throw new FnosRpcException("RPC 响应为空：" + reqId);
             }
-            if (!"success".equals(response.optString("result"))) {
+            String result = response.optString("result");
+            if (!"success".equals(result) && !"succ".equals(result)) {
                 String message = response.optString("errmsg");
                 if (message.length() == 0) {
-                    message = "RPC 请求失败：" + response.optString("errno", response.toString());
+                    message = response.has("errno")
+                            ? "RPC 请求失败：" + response.optString("errno")
+                            : "RPC 请求失败";
                 }
                 throw new FnosRpcException(message);
             }

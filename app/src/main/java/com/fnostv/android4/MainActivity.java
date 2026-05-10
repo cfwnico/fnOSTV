@@ -23,6 +23,10 @@ import android.widget.ProgressBar;
 
 import com.fnostv.android4.config.ProfileStore;
 import com.fnostv.android4.config.ServerProfile;
+import com.fnostv.android4.net.FnosRpcClient;
+import com.fnostv.android4.net.FnosRpcException;
+import com.fnostv.android4.net.FnosSession;
+import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
 import com.fnostv.android4.ui.StatusOverlay;
@@ -44,8 +48,10 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private FullscreenVideoController fullscreenVideoController;
     private RemoteKeyHandler remoteKeyHandler;
     private ProfileStore store;
+    private FnosSessionStore sessionStore;
     private ServerProfile profile;
     private boolean settingsOpen;
+    private boolean nativeAuthRunning;
     private final Handler loadTimeoutHandler = new Handler();
     private final Runnable loadTimeoutRunnable = new Runnable() {
         @Override
@@ -70,6 +76,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         store = new ProfileStore(this);
+        sessionStore = new FnosSessionStore(this);
         CookieSyncManager.createInstance(this);
         buildLayout();
         remoteKeyHandler = new RemoteKeyHandler(this);
@@ -155,8 +162,63 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return;
         }
         statusOverlay.hide();
-        scheduleLoadTimeout();
-        webView.loadUrl(profile.baseUrl);
+        if (profile.username.length() == 0 || profile.password.length() == 0) {
+            openSettings("原生模式需要填写 fnOS 管理员账号和密码");
+            return;
+        }
+        startNativeAuthentication();
+    }
+
+    private void startNativeAuthentication() {
+        if (nativeAuthRunning) {
+            return;
+        }
+        nativeAuthRunning = true;
+        showStatus("正在连接 fnOS 原生 RPC 服务...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final NativeAuthResult result = authenticateNative();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        nativeAuthRunning = false;
+                        if (result.success) {
+                            showStatus("原生登录成功\n文件库和影视首页正在接入中");
+                        } else {
+                            handleServerConnectionFailure(result.message);
+                        }
+                    }
+                });
+            }
+        }, "fnos-native-auth").start();
+    }
+
+    private NativeAuthResult authenticateNative() {
+        try {
+            FnosSession session = sessionStore.load();
+            if (session.hasToken()) {
+                FnosRpcClient authClient = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+                if (authClient.authToken(session)) {
+                    Logger.d("Native RPC token auth succeeded");
+                    return NativeAuthResult.success();
+                }
+                sessionStore.clear();
+            }
+            FnosRpcClient loginClient = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+            FnosSession newSession = loginClient.login();
+            sessionStore.save(newSession);
+            Logger.d("Native RPC login succeeded");
+            return NativeAuthResult.success();
+        } catch (FnosRpcException ex) {
+            sessionStore.clear();
+            Logger.w("Native RPC login failed: " + ex.getMessage());
+            return NativeAuthResult.failure("原生登录失败：" + ex.getMessage());
+        } catch (RuntimeException ex) {
+            sessionStore.clear();
+            Logger.w("Native RPC login crashed: " + ex.getMessage());
+            return NativeAuthResult.failure("原生登录异常：" + ex.getMessage());
+        }
     }
 
     @Override
@@ -370,5 +432,23 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private int dp(int value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private static final class NativeAuthResult {
+        final boolean success;
+        final String message;
+
+        private NativeAuthResult(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+
+        static NativeAuthResult success() {
+            return new NativeAuthResult(true, "");
+        }
+
+        static NativeAuthResult failure(String message) {
+            return new NativeAuthResult(false, message);
+        }
     }
 }
