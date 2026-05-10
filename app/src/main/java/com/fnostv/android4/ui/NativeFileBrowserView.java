@@ -133,6 +133,9 @@ public final class NativeFileBrowserView {
                         if (left.directory != right.directory) {
                             return left.directory ? -1 : 1;
                         }
+                        if (left.isVideo() != right.isVideo()) {
+                            return left.isVideo() ? -1 : 1;
+                        }
                         return left.name.compareToIgnoreCase(right.name);
                     }
                 });
@@ -167,8 +170,9 @@ public final class NativeFileBrowserView {
             if (entry.directory) {
                 return "[目录] " + entry.name;
             }
+            String prefix = entry.isVideo() ? "[视频] " : "[文件] ";
             String size = formatSize(entry.size);
-            return size.length() == 0 ? "[文件] " + entry.name : "[文件] " + entry.name + "    " + size;
+            return size.length() == 0 ? prefix + entry.name : prefix + entry.name + "    " + size;
         }
 
         private String formatSize(long size) {
