@@ -27,6 +27,7 @@ public final class NativeFileBrowserView {
     private final Listener listener;
     private final EntryAdapter adapter = new EntryAdapter();
     private LinearLayout view;
+    private TextView titleView;
     private TextView pathView;
     private TextView emptyView;
     private ListView listView;
@@ -43,11 +44,11 @@ public final class NativeFileBrowserView {
         view.setBackgroundColor(0xFF101820);
         view.setVisibility(View.GONE);
 
-        TextView title = new TextView(context);
-        title.setText("文件库");
-        title.setTextColor(Color.WHITE);
-        title.setTextSize(26);
-        view.addView(title, new LinearLayout.LayoutParams(
+        titleView = new TextView(context);
+        titleView.setText("文件库");
+        titleView.setTextColor(Color.WHITE);
+        titleView.setTextSize(26);
+        view.addView(titleView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -75,7 +76,7 @@ public final class NativeFileBrowserView {
             }
         });
         emptyView = new TextView(context);
-        emptyView.setText("目录为空");
+        emptyView.setText("暂无内容");
         emptyView.setTextColor(0xFFB8C7D9);
         emptyView.setTextSize(18);
         emptyView.setGravity(Gravity.CENTER);
@@ -93,11 +94,16 @@ public final class NativeFileBrowserView {
     }
 
     public void show(String path, List<FnosFileEntry> entries) {
+        showCustom("文件库", path == null || path.length() == 0 ? "根目录" : path, entries, true);
+    }
+
+    public void showCustom(String title, String subtitle, List<FnosFileEntry> entries, boolean sortEntries) {
         if (view != null) {
             view.setVisibility(View.VISIBLE);
         }
-        pathView.setText(path == null || path.length() == 0 ? "根目录" : path);
-        adapter.setEntries(entries);
+        titleView.setText(title == null || title.length() == 0 ? "文件库" : title);
+        pathView.setText(subtitle == null || subtitle.length() == 0 ? "根目录" : subtitle);
+        adapter.setEntries(entries, sortEntries);
         if (listView != null) {
             listView.requestFocus();
             if (entries != null && entries.size() > 0) {
@@ -123,19 +129,24 @@ public final class NativeFileBrowserView {
     private final class EntryAdapter extends BaseAdapter {
         private final List<FnosFileEntry> entries = new ArrayList<FnosFileEntry>();
 
-        void setEntries(List<FnosFileEntry> values) {
+        void setEntries(List<FnosFileEntry> values, boolean sortEntries) {
             entries.clear();
             if (values != null) {
                 entries.addAll(values);
-                Collections.sort(entries, new Comparator<FnosFileEntry>() {
-                    @Override
-                    public int compare(FnosFileEntry left, FnosFileEntry right) {
-                        if (left.directory != right.directory) {
-                            return left.directory ? -1 : 1;
+                if (sortEntries) {
+                    Collections.sort(entries, new Comparator<FnosFileEntry>() {
+                        @Override
+                        public int compare(FnosFileEntry left, FnosFileEntry right) {
+                            if (left.directory != right.directory) {
+                                return left.directory ? -1 : 1;
+                            }
+                            if (left.isVideo() != right.isVideo()) {
+                                return left.isVideo() ? -1 : 1;
+                            }
+                            return left.name.compareToIgnoreCase(right.name);
                         }
-                        return left.name.compareToIgnoreCase(right.name);
-                    }
-                });
+                    });
+                }
             }
             notifyDataSetChanged();
         }
@@ -167,8 +178,9 @@ public final class NativeFileBrowserView {
             if (entry.directory) {
                 return "[目录] " + entry.name;
             }
+            String prefix = entry.isVideo() ? "[视频] " : "[文件] ";
             String size = formatSize(entry.size);
-            return size.length() == 0 ? "[文件] " + entry.name : "[文件] " + entry.name + "    " + size;
+            return size.length() == 0 ? prefix + entry.name : prefix + entry.name + "    " + size;
         }
 
         private String formatSize(long size) {

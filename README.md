@@ -133,4 +133,4 @@ scripts\logcat-app.cmd
 
 - Android 4 WebView 的内核较旧，飞牛 Web 端如果依赖非常新的 JavaScript、CSS 或 TLS 能力，可能需要服务端降级或使用 HTTP 内网访问。
 - 自签名 HTTPS 建议只在可信内网中开启“信任该服务器的 SSL 证书异常”。
-- 旧 WebView 的视频格式支持有限，建议服务端优先提供 H.264/AAC MP4 或 HLS。
+- 原生文件库播放已接入 IJKPlayer，优先在应用内播放常见 MP4/MKV/AVI/WMV/FLV/TS/RMVB 等格式；如果设备性能或编码不兼容，会继续提示并尝试外部播放器。

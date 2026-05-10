@@ -27,10 +27,12 @@ import com.fnostv.android4.config.ProfileStore;
 import com.fnostv.android4.config.ServerProfile;
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosFileList;
+import com.fnostv.android4.net.FnosPlaybackSource;
 import com.fnostv.android4.net.FnosRpcClient;
 import com.fnostv.android4.net.FnosRpcException;
 import com.fnostv.android4.net.FnosSession;
 import com.fnostv.android4.net.FnosSessionStore;
+import com.fnostv.android4.net.RecentPlaybackStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
 import com.fnostv.android4.ui.NativeFileBrowserView;
@@ -47,7 +49,14 @@ import com.fnostv.android4.web.LoginScript;
 import com.fnostv.android4.web.WebViewConfigurator;
 import com.fnostv.android4.web.WebViewEvents;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class MainActivity extends Activity implements WebViewEvents, RemoteActions, NativeHomeView.Listener, NativeFileBrowserView.Listener, NativeVideoPlayerView.Listener {
+    private static final int BROWSER_MODE_FILES = 0;
+    private static final int BROWSER_MODE_RECENT = 1;
+    private static final int BROWSER_MODE_MEDIA = 2;
+
     private FrameLayout root;
     private WebView webView;
     private NativeHomeView nativeHomeView;
@@ -59,10 +68,12 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private RemoteKeyHandler remoteKeyHandler;
     private ProfileStore store;
     private FnosSessionStore sessionStore;
+    private RecentPlaybackStore recentPlaybackStore;
     private ServerProfile profile;
     private boolean settingsOpen;
     private boolean nativeAuthRunning;
     private String currentFilePath = "";
+    private int browserMode = BROWSER_MODE_FILES;
     private final Handler loadTimeoutHandler = new Handler();
     private final Runnable loadTimeoutRunnable = new Runnable() {
         @Override
@@ -88,6 +99,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         store = new ProfileStore(this);
         sessionStore = new FnosSessionStore(this);
+        recentPlaybackStore = new RecentPlaybackStore(this);
         CookieSyncManager.createInstance(this);
         buildLayout();
         remoteKeyHandler = new RemoteKeyHandler(this);
@@ -129,6 +141,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (nativeVideoPlayerView != null && nativeVideoPlayerView.onKeyDown(keyCode, event)) {
+            return true;
+        }
         if (remoteKeyHandler.onKeyDown(keyCode, event)) {
             return true;
         }
@@ -225,10 +240,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             FnosSession session = sessionStore.load();
             if (session.hasToken()) {
-                FnosRpcClient authClient = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-                if (authClient.authToken(session)) {
-                    Logger.d("Native RPC token auth succeeded");
-                    return NativeAuthResult.success();
+                try {
+                    FnosRpcClient authClient = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+                    if (authClient.authToken(session)) {
+                        Logger.d("Native RPC token auth succeeded");
+                        return NativeAuthResult.success();
+                    }
+                } catch (FnosRpcException ex) {
+                    Logger.w("Native RPC token auth failed, retrying login: " + ex.getMessage());
                 }
                 sessionStore.clear();
             }
@@ -286,6 +305,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             openFileBrowser("");
             return;
         }
+        if (NativeHomeView.ACTION_RECENT.equals(action)) {
+            openRecentPlayback();
+            return;
+        }
+        if (NativeHomeView.ACTION_MEDIA.equals(action)) {
+            openMediaCenter("");
+            return;
+        }
         if (NativeHomeView.ACTION_MEDIA.equals(action)) {
             showStatus("影视中心接口正在反查");
             return;
@@ -295,6 +322,13 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     @Override
     public void onFileEntrySelected(FnosFileEntry entry) {
+        if (entry.directory && browserMode == BROWSER_MODE_MEDIA) {
+            openMediaCenter(entry.path);
+            return;
+        }
+        if (entry.directory && browserMode == BROWSER_MODE_RECENT) {
+            return;
+        }
         if (entry.directory) {
             openFileBrowser(entry.path);
             return;
@@ -303,9 +337,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     @Override
-    public void onNativeVideoError(FnosFileEntry entry, String url) {
+    public void onNativeVideoError(FnosFileEntry entry, String url, String reason) {
+        Logger.w("Native video playback failed: " + reason
+                + " file=" + (entry == null ? "" : entry.name)
+                + " format=" + (entry == null ? "" : entry.formatLabel()));
         nativeVideoPlayerView.hide();
-        openExternalPlayer(entry, url, "内置播放器无法播放，正在尝试外部播放器");
+        openExternalPlayer(entry, url, "内置播放器无法播放"
+                + (reason == null || reason.length() == 0 ? "" : "（" + reason + "）")
+                + "，正在尝试外部播放器");
     }
 
     @Override
@@ -319,6 +358,18 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return true;
         }
         if (fileBrowserView.isVisible()) {
+            if (browserMode == BROWSER_MODE_RECENT) {
+                showNativeHome();
+                return true;
+            }
+            if (browserMode == BROWSER_MODE_MEDIA) {
+                if (currentFilePath.length() == 0) {
+                    showNativeHome();
+                } else {
+                    openMediaCenter(parentPath(currentFilePath));
+                }
+                return true;
+            }
             if (currentFilePath.length() == 0) {
                 showNativeHome();
             } else {
@@ -347,6 +398,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     private void openFileBrowser(final String path) {
+        browserMode = BROWSER_MODE_FILES;
         currentFilePath = path == null ? "" : path;
         nativeHomeView.hide();
         webView.setVisibility(View.GONE);
@@ -369,6 +421,67 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 });
             }
         }, "fnos-file-list").start();
+    }
+
+    private void openRecentPlayback() {
+        browserMode = BROWSER_MODE_RECENT;
+        currentFilePath = "";
+        nativeHomeView.hide();
+        webView.setVisibility(View.GONE);
+        statusOverlay.hide();
+        List<FnosFileEntry> entries = recentPlaybackStore.list();
+        fileBrowserView.showCustom("最近播放", entries.size() == 0 ? "暂无播放记录" : "本机播放记录", entries, false);
+    }
+
+    private void openMediaCenter(final String path) {
+        browserMode = BROWSER_MODE_MEDIA;
+        currentFilePath = path == null ? "" : path;
+        nativeHomeView.hide();
+        webView.setVisibility(View.GONE);
+        showStatus("正在加载影视入口...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final MediaLoadResult result = loadMediaCenter(currentFilePath);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (result.success) {
+                            statusOverlay.hide();
+                            fileBrowserView.showCustom(result.title, result.subtitle, result.list.entries, result.sortEntries);
+                        } else {
+                            showStatus(result.message);
+                            nativeHomeView.show();
+                        }
+                    }
+                });
+            }
+        }, "fnos-media-center").start();
+    }
+
+    private MediaLoadResult loadMediaCenter(String path) {
+        if (path == null || path.length() == 0) {
+            try {
+                FnosSession session = sessionStore.load();
+                if (session.hasToken()) {
+                    FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+                    FnosFileList list = client.mediaCenterEntries(session);
+                    if (list.entries.size() > 0) {
+                        return MediaLoadResult.success("影视中心", "fnOS mediaCenter", list, false);
+                    }
+                }
+            } catch (FnosRpcException ex) {
+                Logger.w("Media center native API unavailable: " + ex.getMessage());
+            } catch (RuntimeException ex) {
+                Logger.w("Media center native API crashed: " + ex.getMessage());
+            }
+        }
+        FileLoadResult fallback = loadFileList(path);
+        if (fallback.success) {
+            String subtitle = path == null || path.length() == 0 ? "影视中心 API 未稳定，已进入文件模式" : path;
+            return MediaLoadResult.success("影视入口（文件模式）", subtitle, fallback.list, true);
+        }
+        return MediaLoadResult.failure(fallback.message);
     }
 
     private FileLoadResult loadFileList(String path) {
@@ -400,11 +513,70 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         }
         String url = entry.playbackUrl();
         if (url.length() > 0) {
-            statusOverlay.hide();
+            playResolvedUrl(entry, url);
+            return;
+        }
+        resolveAndPlaySources(entry);
+    }
+
+    private void playResolvedUrl(FnosFileEntry entry, String url) {
+        statusOverlay.hide();
+        recentPlaybackStore.remember(entry);
+        if (entry.canTryNativePlayback()) {
             nativeVideoPlayerView.play(entry, url);
             return;
         }
-        resolveAndPlayFile(entry);
+        openExternalPlayer(entry, url, "当前格式 " + entry.formatLabel()
+                + " 超出 Android 4 内置播放器兼容范围，正在尝试外部播放器");
+    }
+
+    private void playResolvedSources(FnosFileEntry entry, List<FnosPlaybackSource> sources) {
+        statusOverlay.hide();
+        recentPlaybackStore.remember(entry);
+        if (entry.canTryNativePlayback()) {
+            nativeVideoPlayerView.play(entry, sources);
+            return;
+        }
+        FnosPlaybackSource first = sources == null || sources.size() == 0 ? null : sources.get(0);
+        openExternalPlayer(entry, first == null ? "" : first.url, "当前格式 " + entry.formatLabel()
+                + " 超出 Android 4 内置播放器兼容范围，正在尝试外部播放器");
+    }
+
+    private void resolveAndPlaySources(final FnosFileEntry entry) {
+        showStatus("正在准备播放源...\n" + entry.name);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final PlaybackSourcesResult result = resolvePlaybackSources(entry);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (result.success) {
+                            playResolvedSources(entry, result.sources);
+                        } else {
+                            showStatus(result.message);
+                        }
+                    }
+                });
+            }
+        }, "fnos-playback-sources").start();
+    }
+
+    private PlaybackSourcesResult resolvePlaybackSources(FnosFileEntry entry) {
+        try {
+            FnosSession session = sessionStore.load();
+            if (!session.hasToken()) {
+                return PlaybackSourcesResult.failure("登录会话已失效");
+            }
+            FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+            return PlaybackSourcesResult.success(client.playbackSources(session, entry));
+        } catch (FnosRpcException ex) {
+            Logger.w("Native playback sources failed: " + ex.getMessage());
+            return PlaybackSourcesResult.failure("播放源准备失败：" + ex.getMessage());
+        } catch (RuntimeException ex) {
+            Logger.w("Native playback sources crashed: " + ex.getMessage());
+            return PlaybackSourcesResult.failure("播放源准备异常：" + ex.getMessage());
+        }
     }
 
     private void resolveAndPlayFile(final FnosFileEntry entry) {
@@ -417,8 +589,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                     @Override
                     public void run() {
                         if (result.success) {
-                            statusOverlay.hide();
-                            nativeVideoPlayerView.play(entry, result.url);
+                            playResolvedUrl(entry, result.url);
                         } else {
                             showStatus(result.message);
                         }
@@ -453,6 +624,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(Uri.parse(url), entry == null ? "video/*" : entry.mimeType());
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            if (entry != null) {
+                intent.putExtra("title", entry.name);
+            }
+            if (intent.resolveActivity(getPackageManager()) == null) {
+                showStatus(fallbackMessage + "\n未找到外部播放器，请安装 VLC、MX Player 或系统兼容播放器");
+                return;
+            }
             startActivity(intent);
         } catch (ActivityNotFoundException ex) {
             showStatus(fallbackMessage + "\n未找到可播放该视频的外部应用");
@@ -669,6 +848,52 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
         static FileLoadResult failure(String message) {
             return new FileLoadResult(false, null, message);
+        }
+    }
+
+    private static final class MediaLoadResult {
+        final boolean success;
+        final String title;
+        final String subtitle;
+        final FnosFileList list;
+        final boolean sortEntries;
+        final String message;
+
+        private MediaLoadResult(boolean success, String title, String subtitle, FnosFileList list, boolean sortEntries, String message) {
+            this.success = success;
+            this.title = title;
+            this.subtitle = subtitle;
+            this.list = list;
+            this.sortEntries = sortEntries;
+            this.message = message;
+        }
+
+        static MediaLoadResult success(String title, String subtitle, FnosFileList list, boolean sortEntries) {
+            return new MediaLoadResult(true, title, subtitle, list, sortEntries, "");
+        }
+
+        static MediaLoadResult failure(String message) {
+            return new MediaLoadResult(false, "", "", null, true, message);
+        }
+    }
+
+    private static final class PlaybackSourcesResult {
+        final boolean success;
+        final List<FnosPlaybackSource> sources;
+        final String message;
+
+        private PlaybackSourcesResult(boolean success, List<FnosPlaybackSource> sources, String message) {
+            this.success = success;
+            this.sources = sources == null ? new ArrayList<FnosPlaybackSource>() : sources;
+            this.message = message;
+        }
+
+        static PlaybackSourcesResult success(List<FnosPlaybackSource> sources) {
+            return new PlaybackSourcesResult(true, sources, "");
+        }
+
+        static PlaybackSourcesResult failure(String message) {
+            return new PlaybackSourcesResult(false, null, message);
         }
     }
 
