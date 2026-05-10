@@ -399,12 +399,50 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return;
         }
         String url = entry.playbackUrl();
-        if (url.length() == 0) {
-            showStatus("已识别视频文件，但 fnOS 未返回播放直链\n后续将接入文件直链解析或本地代理\n" + entry.path);
+        if (url.length() > 0) {
+            statusOverlay.hide();
+            nativeVideoPlayerView.play(entry, url);
             return;
         }
-        statusOverlay.hide();
-        nativeVideoPlayerView.play(entry, url);
+        resolveAndPlayFile(entry);
+    }
+
+    private void resolveAndPlayFile(final FnosFileEntry entry) {
+        showStatus("正在准备播放直链...\n" + entry.name);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final PlaybackResolveResult result = resolvePlaybackUrl(entry);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (result.success) {
+                            statusOverlay.hide();
+                            nativeVideoPlayerView.play(entry, result.url);
+                        } else {
+                            showStatus(result.message);
+                        }
+                    }
+                });
+            }
+        }, "fnos-playback-url").start();
+    }
+
+    private PlaybackResolveResult resolvePlaybackUrl(FnosFileEntry entry) {
+        try {
+            FnosSession session = sessionStore.load();
+            if (!session.hasToken()) {
+                return PlaybackResolveResult.failure("登录会话已失效");
+            }
+            FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+            return PlaybackResolveResult.success(client.downloadUrl(session, entry.path));
+        } catch (FnosRpcException ex) {
+            Logger.w("Native playback url failed: " + ex.getMessage());
+            return PlaybackResolveResult.failure("视频直链准备失败：" + ex.getMessage());
+        } catch (RuntimeException ex) {
+            Logger.w("Native playback url crashed: " + ex.getMessage());
+            return PlaybackResolveResult.failure("视频直链准备异常：" + ex.getMessage());
+        }
     }
 
     private void openExternalPlayer(FnosFileEntry entry, String url, String fallbackMessage) {
@@ -631,6 +669,26 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
         static FileLoadResult failure(String message) {
             return new FileLoadResult(false, null, message);
+        }
+    }
+
+    private static final class PlaybackResolveResult {
+        final boolean success;
+        final String url;
+        final String message;
+
+        private PlaybackResolveResult(boolean success, String url, String message) {
+            this.success = success;
+            this.url = url == null ? "" : url;
+            this.message = message;
+        }
+
+        static PlaybackResolveResult success(String url) {
+            return new PlaybackResolveResult(true, url, "");
+        }
+
+        static PlaybackResolveResult failure(String message) {
+            return new PlaybackResolveResult(false, "", message);
         }
     }
 }

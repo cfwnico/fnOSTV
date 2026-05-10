@@ -116,6 +116,11 @@ public final class FnosRpcClient {
         return client.listDirOnFileSocket(session, path);
     }
 
+    public String downloadUrl(FnosSession session, String path) throws FnosRpcException {
+        FnosRpcClient client = new FnosRpcClient(profile, deviceId, SOCKET_FILE);
+        return client.downloadUrlOnFileSocket(session, path);
+    }
+
     public void close() {
         if (webSocket != null) {
             webSocket.close(1000, "done");
@@ -191,6 +196,26 @@ public final class FnosRpcClient {
         }
     }
 
+    private String downloadUrlOnFileSocket(FnosSession session, String path) throws FnosRpcException {
+        if (path == null || path.length() == 0) {
+            throw new FnosRpcException("文件路径为空");
+        }
+        connect();
+        try {
+            loadSessionId(false);
+            authenticateToken(session, false);
+            JSONObject request = new JSONObject();
+            request.put("req", "file.download");
+            request.put("files", new JSONArray().put(path));
+            JSONObject response = send(signRequest(request, session.secretHex), REQUEST_TIMEOUT_SECONDS);
+            return parseDownloadUrl(response);
+        } catch (JSONException ex) {
+            throw new FnosRpcException("构造下载直链请求失败", ex);
+        } finally {
+            close();
+        }
+    }
+
     private FnosFileList parseFileList(String path, String uid, JSONObject response) {
         List<FnosFileEntry> entries = new ArrayList<FnosFileEntry>();
         JSONArray files = response.optJSONArray("files");
@@ -206,6 +231,50 @@ public final class FnosRpcClient {
             }
         }
         return new FnosFileList(path, entries);
+    }
+
+    private String parseDownloadUrl(JSONObject response) throws FnosRpcException {
+        JSONArray downloads = response.optJSONArray("download");
+        JSONObject first = downloads == null || downloads.length() == 0 ? null : downloads.optJSONObject(0);
+        if (first != null) {
+            int errno = first.optInt("errno", 0);
+            if (errno != 0) {
+                throw new FnosRpcException("文件下载准备失败：" + errno);
+            }
+            String url = absoluteUrl(downloadCandidate(first));
+            if (url.length() > 0) {
+                return url;
+            }
+        }
+        String url = absoluteUrl(downloadCandidate(response));
+        if (url.length() > 0) {
+            return url;
+        }
+        throw new FnosRpcException("fnOS 未返回文件下载直链");
+    }
+
+    private String downloadCandidate(JSONObject object) {
+        String[] keys = {"url", "downloadUrl", "href", "link", "src", "location"};
+        for (int i = 0; i < keys.length; i++) {
+            String value = object.optString(keys[i]);
+            if (value.length() > 0) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private String absoluteUrl(String value) {
+        if (value == null || value.length() == 0) {
+            return "";
+        }
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            return value;
+        }
+        if (value.startsWith("/")) {
+            return origin(profile.baseUrl) + value;
+        }
+        return "";
     }
 
     private JSONObject loginPayload(String reqId) throws FnosRpcException {
@@ -393,18 +462,27 @@ public final class FnosRpcClient {
     private static final class PendingCall {
         private final CountDownLatch latch = new CountDownLatch(1);
         private final JSONArray partialFiles = new JSONArray();
+        private final JSONArray partialDownload = new JSONArray();
         private JSONObject response;
         private FnosRpcException error;
 
         void update(JSONObject value) {
             appendFiles(value.optJSONArray("files"));
+            appendDownload(value.optJSONArray("download"));
         }
 
         void complete(JSONObject value) {
             appendFiles(value.optJSONArray("files"));
+            appendDownload(value.optJSONArray("download"));
             if (partialFiles.length() > 0 && !value.has("files")) {
                 try {
                     value.put("files", partialFiles);
+                } catch (JSONException ignored) {
+                }
+            }
+            if (partialDownload.length() > 0 && !value.has("download")) {
+                try {
+                    value.put("download", partialDownload);
                 } catch (JSONException ignored) {
                 }
             }
@@ -418,6 +496,15 @@ public final class FnosRpcClient {
             }
             for (int i = 0; i < files.length(); i++) {
                 partialFiles.put(files.opt(i));
+            }
+        }
+
+        private void appendDownload(JSONArray downloads) {
+            if (downloads == null) {
+                return;
+            }
+            for (int i = 0; i < downloads.length(); i++) {
+                partialDownload.put(downloads.opt(i));
             }
         }
 
