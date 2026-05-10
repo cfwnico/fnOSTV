@@ -8,6 +8,8 @@ public final class Constants {
 
     public static final int REQUEST_SETTINGS = 31;
     public static final int PROGRESS_BAR_HEIGHT_DP = 3;
+    public static final long MAIN_PAGE_LOAD_TIMEOUT_MS = 15000L;
+    public static final long PAGE_CONTENT_CHECK_DELAY_MS = 2000L;
 
     private Constants() {
     }

@@ -7,11 +7,11 @@ import android.webkit.WebView;
 public interface WebViewEvents {
     void onPageLoadStarted();
 
-    void onPageLoadFinished(WebView view);
+    void onPageLoadFinished(WebView view, String url);
 
     void onProgressChanged(int progress);
 
-    void onMainFrameError(String description);
+    void onMainFrameError(String description, String failingUrl);
 
     void onSslError(SslErrorHandler handler, SslError error);
 }

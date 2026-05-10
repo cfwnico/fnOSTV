@@ -5,7 +5,9 @@ import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.http.SslError;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -14,6 +16,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.CookieSyncManager;
 import android.webkit.SslErrorHandler;
+import android.webkit.ValueCallback;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
@@ -24,6 +27,7 @@ import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
 import com.fnostv.android4.ui.StatusOverlay;
 import com.fnostv.android4.util.Constants;
+import com.fnostv.android4.util.Logger;
 import com.fnostv.android4.web.FnosChromeClient;
 import com.fnostv.android4.web.FnosDownloadListener;
 import com.fnostv.android4.web.FnosWebViewClient;
@@ -41,6 +45,24 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private RemoteKeyHandler remoteKeyHandler;
     private ProfileStore store;
     private ServerProfile profile;
+    private boolean settingsOpen;
+    private final Handler loadTimeoutHandler = new Handler();
+    private final Runnable loadTimeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            handleServerConnectionFailure("连接服务器超时");
+        }
+    };
+    private final Runnable blankPageCheckRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isBlankWebViewPage(webView)) {
+                handleServerConnectionFailure("连接服务器失败：页面无响应");
+            } else {
+                markPageUsable(webView);
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,6 +93,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     @Override
     protected void onDestroy() {
         if (webView != null) {
+            cancelLoadTimeout();
             webView.stopLoading();
             webView.destroy();
         }
@@ -81,6 +104,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == Constants.REQUEST_SETTINGS) {
+            settingsOpen = false;
             loadProfileOrSettings();
         }
     }
@@ -131,11 +155,16 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return;
         }
         statusOverlay.hide();
+        scheduleLoadTimeout();
         webView.loadUrl(profile.baseUrl);
     }
 
     @Override
     public boolean openSettings() {
+        if (settingsOpen) {
+            return true;
+        }
+        settingsOpen = true;
         startActivityForResult(new Intent(this, SettingsActivity.class), Constants.REQUEST_SETTINGS);
         return true;
     }
@@ -170,11 +199,80 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     @Override
     public void onPageLoadStarted() {
         progressBar.setVisibility(View.VISIBLE);
+        scheduleLoadTimeout();
     }
 
     @Override
-    public void onPageLoadFinished(WebView view) {
+    public void onPageLoadFinished(WebView view, String url) {
+        Logger.d("Page finished url=" + url + " title=" + view.getTitle() + " height=" + view.getContentHeight());
+        if (isWebViewErrorPage(view)) {
+            handleServerConnectionFailure("连接服务器失败");
+            return;
+        }
         progressBar.setVisibility(View.GONE);
+        verifyPageReadiness(view);
+    }
+
+    private void verifyPageReadiness(final WebView view) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            view.evaluateJavascript(pageProbeScript(), new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String value) {
+                    Logger.d("Page probe result=" + value);
+                    if (isPageProbeBlank(value)) {
+                        handleServerConnectionFailure("连接服务器失败：页面无响应");
+                    } else {
+                        markPageUsable(view);
+                    }
+                }
+            });
+            return;
+        }
+        if (isBlankWebViewPage(view)) {
+            loadTimeoutHandler.removeCallbacks(blankPageCheckRunnable);
+            loadTimeoutHandler.postDelayed(blankPageCheckRunnable, Constants.PAGE_CONTENT_CHECK_DELAY_MS);
+        } else {
+            markPageUsable(view);
+        }
+    }
+
+    private String pageProbeScript() {
+        return "(function(){try{"
+                + "var body=document.body;if(!body){return '0|0';}"
+                + "function ignored(e){var t=e&&e.tagName;return t==='SCRIPT'||t==='STYLE'||t==='META'||t==='LINK'||t==='NOSCRIPT';}"
+                + "function visible(e){if(!e||ignored(e)){return false;}var s=window.getComputedStyle?getComputedStyle(e):e.currentStyle;"
+                + "return !s||((s.display!=='none')&&(s.visibility!=='hidden')&&(s.opacity!=='0'));}"
+                + "function read(n){if(!n){return '';}if(n.nodeType===3){return visible(n.parentNode)?n.nodeValue:'';}"
+                + "if(n.nodeType!==1||!visible(n)){return '';}var tag=n.tagName;"
+                + "var value=(tag==='INPUT'||tag==='TEXTAREA')?(n.placeholder||n.value||n.name||n.id||''):(tag==='BUTTON'||tag==='A'?(n.innerText||n.textContent||n.value||n.title||''):'');"
+                + "for(var i=0;i<n.childNodes.length;i++){value+=' '+read(n.childNodes[i]);}return value;}"
+                + "var text=read(body);"
+                + "text=text.replace(/\\s+/g,'');"
+                + "var nodes=body.getElementsByTagName('*').length;"
+                + "return text.length+'|'+nodes;"
+                + "}catch(e){return '0|0';}})()";
+    }
+
+    private boolean isPageProbeBlank(String value) {
+        if (value == null) {
+            return true;
+        }
+        String normalized = value.replace("\"", "").trim();
+        int separator = normalized.indexOf('|');
+        String textLengthValue = separator >= 0 ? normalized.substring(0, separator) : normalized;
+        return parseInt(textLengthValue) <= 0;
+    }
+
+    private int parseInt(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private void markPageUsable(WebView view) {
+        cancelLoadTimeout();
         CookieSyncManager.getInstance().sync();
         if (profile.autoLogin && profile.username.length() > 0 && profile.password.length() > 0) {
             view.loadUrl(LoginScript.build(profile));
@@ -188,8 +286,42 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     @Override
-    public void onMainFrameError(String description) {
-        showStatus("加载失败：" + description + "\n按菜单键修改服务器设置");
+    public void onMainFrameError(String description, String failingUrl) {
+        Logger.w("Main page load failed: " + description + " url=" + failingUrl);
+        handleServerConnectionFailure("连接服务器失败：" + description);
+    }
+
+    private void handleServerConnectionFailure(String message) {
+        cancelLoadTimeout();
+        Logger.w(message);
+        showStatus(message + "\n正在返回登录设置页");
+        webView.stopLoading();
+        openSettings();
+    }
+
+    private boolean isWebViewErrorPage(WebView view) {
+        String title = view.getTitle();
+        if (title == null) {
+            return false;
+        }
+        title = title.toLowerCase();
+        return title.indexOf("web page not available") >= 0
+                || title.indexOf("网页无法打开") >= 0
+                || title.indexOf("page not found") >= 0;
+    }
+
+    private boolean isBlankWebViewPage(WebView view) {
+        return view.getContentHeight() <= 0;
+    }
+
+    private void scheduleLoadTimeout() {
+        cancelLoadTimeout();
+        loadTimeoutHandler.postDelayed(loadTimeoutRunnable, Constants.MAIN_PAGE_LOAD_TIMEOUT_MS);
+    }
+
+    private void cancelLoadTimeout() {
+        loadTimeoutHandler.removeCallbacks(loadTimeoutRunnable);
+        loadTimeoutHandler.removeCallbacks(blankPageCheckRunnable);
     }
 
     @Override
