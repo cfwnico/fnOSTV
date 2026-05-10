@@ -3,6 +3,7 @@ package com.fnostv.android4.ui;
 import android.content.Context;
 import android.graphics.Color;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -21,6 +22,10 @@ import java.util.List;
 public final class NativeFileBrowserView {
     public interface Listener {
         void onFileEntrySelected(FnosFileEntry entry);
+
+        void onFileFavoriteToggled(FnosFileEntry entry);
+
+        boolean isFileFavorite(FnosFileEntry entry);
     }
 
     private final Context context;
@@ -41,7 +46,7 @@ public final class NativeFileBrowserView {
         view = new LinearLayout(context);
         view.setOrientation(LinearLayout.VERTICAL);
         view.setPadding(dp(36), dp(28), dp(36), dp(28));
-        view.setBackgroundColor(0xFF101820);
+        view.setBackgroundColor(FnosTheme.COLOR_APP_BG);
         view.setVisibility(View.GONE);
 
         titleView = new TextView(context);
@@ -53,7 +58,7 @@ public final class NativeFileBrowserView {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         pathView = new TextView(context);
-        pathView.setTextColor(0xFFB8C7D9);
+        pathView.setTextColor(FnosTheme.COLOR_TEXT_MUTED);
         pathView.setTextSize(14);
         pathView.setSingleLine(true);
         LinearLayout.LayoutParams pathParams = new LinearLayout.LayoutParams(
@@ -69,6 +74,23 @@ public final class NativeFileBrowserView {
         listView.setDividerHeight(1);
         listView.setCacheColorHint(Color.TRANSPARENT);
         listView.setBackgroundColor(Color.TRANSPARENT);
+        listView.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    int position = listView.getSelectedItemPosition();
+                    if (position >= 0 && position < adapter.getCount()) {
+                        FnosFileEntry entry = adapter.getItem(position);
+                        if (!entry.directory) {
+                            listener.onFileFavoriteToggled(entry);
+                            adapter.notifyDataSetChanged();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+        });
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View clicked, int position, long id) {
@@ -77,7 +99,7 @@ public final class NativeFileBrowserView {
         });
         emptyView = new TextView(context);
         emptyView.setText("暂无内容");
-        emptyView.setTextColor(0xFFB8C7D9);
+        emptyView.setTextColor(FnosTheme.COLOR_TEXT_MUTED);
         emptyView.setTextSize(18);
         emptyView.setGravity(Gravity.CENTER);
         emptyView.setVisibility(View.GONE);
@@ -102,7 +124,8 @@ public final class NativeFileBrowserView {
             view.setVisibility(View.VISIBLE);
         }
         titleView.setText(title == null || title.length() == 0 ? "文件库" : title);
-        pathView.setText(subtitle == null || subtitle.length() == 0 ? "根目录" : subtitle);
+        String path = subtitle == null || subtitle.length() == 0 ? "根目录" : subtitle;
+        pathView.setText(path + "    右键收藏/取消收藏");
         adapter.setEntries(entries, sortEntries);
         if (listView != null) {
             listView.requestFocus();
@@ -123,7 +146,7 @@ public final class NativeFileBrowserView {
     }
 
     private int dp(int value) {
-        return (int) (value * context.getResources().getDisplayMetrics().density + 0.5f);
+        return FnosTheme.dp(context, value);
     }
 
     private final class EntryAdapter extends BaseAdapter {
@@ -178,9 +201,10 @@ public final class NativeFileBrowserView {
             if (entry.directory) {
                 return "[目录] " + entry.name;
             }
+            String favorite = listener.isFileFavorite(entry) ? "[收藏] " : "";
             String prefix = entry.isVideo() ? "[视频] " : "[文件] ";
             String size = formatSize(entry.size);
-            return size.length() == 0 ? prefix + entry.name : prefix + entry.name + "    " + size;
+            return size.length() == 0 ? favorite + prefix + entry.name : favorite + prefix + entry.name + "    " + size;
         }
 
         private String formatSize(long size) {
@@ -206,7 +230,7 @@ public final class NativeFileBrowserView {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(18), 0, dp(18), 0);
             row.setMinHeight(dp(54));
-            row.setBackgroundColor(0xFF182536);
+            row.setBackgroundDrawable(FnosTheme.rounded(FnosTheme.COLOR_CARD, 4, context));
             return row;
         }
     }

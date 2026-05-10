@@ -22,9 +22,11 @@ import android.webkit.ValueCallback;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 
 import com.fnostv.android4.config.ProfileStore;
 import com.fnostv.android4.config.ServerProfile;
+import com.fnostv.android4.net.FavoriteStore;
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosFileList;
 import com.fnostv.android4.net.FnosPlaybackSource;
@@ -56,6 +58,8 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private static final int BROWSER_MODE_FILES = 0;
     private static final int BROWSER_MODE_RECENT = 1;
     private static final int BROWSER_MODE_MEDIA = 2;
+    private static final int BROWSER_MODE_FAVORITES = 3;
+    private static final int BROWSER_MODE_CATEGORY = 4;
 
     private FrameLayout root;
     private WebView webView;
@@ -69,6 +73,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private ProfileStore store;
     private FnosSessionStore sessionStore;
     private RecentPlaybackStore recentPlaybackStore;
+    private FavoriteStore favoriteStore;
     private ServerProfile profile;
     private boolean settingsOpen;
     private boolean nativeAuthRunning;
@@ -100,6 +105,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         store = new ProfileStore(this);
         sessionStore = new FnosSessionStore(this);
         recentPlaybackStore = new RecentPlaybackStore(this);
+        favoriteStore = new FavoriteStore(this);
         CookieSyncManager.createInstance(this);
         buildLayout();
         remoteKeyHandler = new RemoteKeyHandler(this);
@@ -292,11 +298,44 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         webView.setVisibility(View.GONE);
         fileBrowserView.hide();
         nativeVideoPlayerView.hide();
+        updateHomeCounts();
         nativeHomeView.show();
     }
 
     @Override
     public void onHomeAction(String action) {
+        if (NativeHomeView.ACTION_HOME.equals(action)) {
+            showNativeHome();
+            return;
+        }
+        if (NativeHomeView.ACTION_FAVORITES.equals(action)) {
+            openFavorites();
+            return;
+        }
+        if (NativeHomeView.ACTION_ALL.equals(action)) {
+            openMediaCenter("");
+            return;
+        }
+        if (NativeHomeView.ACTION_MOVIES.equals(action)) {
+            openCategory("电影", NativeHomeView.ACTION_MOVIES);
+            return;
+        }
+        if (NativeHomeView.ACTION_TV.equals(action)) {
+            openCategory("电视节目", NativeHomeView.ACTION_TV);
+            return;
+        }
+        if (NativeHomeView.ACTION_OTHER.equals(action)) {
+            openCategory("其他", NativeHomeView.ACTION_OTHER);
+            return;
+        }
+        if (NativeHomeView.ACTION_SEARCH.equals(action)) {
+            showStatus("搜索正在接入，当前可通过文件库浏览");
+            return;
+        }
+        if (NativeHomeView.ACTION_USER.equals(action)) {
+            showStatus(profile == null ? "未登录" : "当前用户：" + profile.username);
+            return;
+        }
         if (NativeHomeView.ACTION_SETTINGS.equals(action)) {
             openSettings();
             return;
@@ -337,6 +376,18 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     @Override
+    public void onFileFavoriteToggled(FnosFileEntry entry) {
+        boolean added = favoriteStore.toggle(entry);
+        updateHomeCounts();
+        Toast.makeText(this, added ? "已加入收藏：" + entry.name : "已取消收藏：" + entry.name, Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public boolean isFileFavorite(FnosFileEntry entry) {
+        return favoriteStore.isFavorite(entry);
+    }
+
+    @Override
     public void onNativeVideoError(FnosFileEntry entry, String url, String reason) {
         Logger.w("Native video playback failed: " + reason
                 + " file=" + (entry == null ? "" : entry.name)
@@ -358,6 +409,10 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return true;
         }
         if (fileBrowserView.isVisible()) {
+            if (browserMode == BROWSER_MODE_FAVORITES || browserMode == BROWSER_MODE_CATEGORY) {
+                showNativeHome();
+                return true;
+            }
             if (browserMode == BROWSER_MODE_RECENT) {
                 showNativeHome();
                 return true;
@@ -433,6 +488,26 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         fileBrowserView.showCustom("最近播放", entries.size() == 0 ? "暂无播放记录" : "本机播放记录", entries, false);
     }
 
+    private void openFavorites() {
+        browserMode = BROWSER_MODE_FAVORITES;
+        currentFilePath = "";
+        nativeHomeView.hide();
+        webView.setVisibility(View.GONE);
+        statusOverlay.hide();
+        List<FnosFileEntry> entries = favoriteStore.list();
+        fileBrowserView.showCustom("收藏", entries.size() == 0 ? "暂无收藏，文件列表中按右键可收藏" : "本机收藏", entries, false);
+    }
+
+    private void openCategory(String title, String category) {
+        browserMode = BROWSER_MODE_CATEGORY;
+        currentFilePath = "";
+        nativeHomeView.hide();
+        webView.setVisibility(View.GONE);
+        statusOverlay.hide();
+        List<FnosFileEntry> entries = filterCategory(knownMediaEntries(), category);
+        fileBrowserView.showCustom(title, entries.size() == 0 ? "暂无内容，先从影视大全或文件库播放/收藏媒体" : "来自最近播放和收藏", entries, false);
+    }
+
     private void openMediaCenter(final String path) {
         browserMode = BROWSER_MODE_MEDIA;
         currentFilePath = path == null ? "" : path;
@@ -499,6 +574,87 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             Logger.w("Native file list crashed: " + ex.getMessage());
             return FileLoadResult.failure("文件库加载异常：" + ex.getMessage());
         }
+    }
+
+    private void updateHomeCounts() {
+        List<FnosFileEntry> known = knownMediaEntries();
+        nativeHomeView.updateCounts(
+                favoriteStore.list().size(),
+                1,
+                known.size(),
+                filterCategory(known, NativeHomeView.ACTION_MOVIES).size(),
+                filterCategory(known, NativeHomeView.ACTION_TV).size(),
+                filterCategory(known, NativeHomeView.ACTION_OTHER).size());
+    }
+
+    private List<FnosFileEntry> knownMediaEntries() {
+        List<FnosFileEntry> values = new ArrayList<FnosFileEntry>();
+        appendUnique(values, recentPlaybackStore.list());
+        appendUnique(values, favoriteStore.list());
+        return values;
+    }
+
+    private void appendUnique(List<FnosFileEntry> target, List<FnosFileEntry> source) {
+        if (source == null) {
+            return;
+        }
+        for (int i = 0; i < source.size(); i++) {
+            FnosFileEntry entry = source.get(i);
+            if (entry != null && entry.isVideo() && !containsPath(target, entry.path)) {
+                target.add(entry);
+            }
+        }
+    }
+
+    private boolean containsPath(List<FnosFileEntry> entries, String path) {
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i).path.equals(path)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<FnosFileEntry> filterCategory(List<FnosFileEntry> entries, String category) {
+        List<FnosFileEntry> filtered = new ArrayList<FnosFileEntry>();
+        for (int i = 0; i < entries.size(); i++) {
+            FnosFileEntry entry = entries.get(i);
+            if (NativeHomeView.ACTION_MOVIES.equals(category) && isMovie(entry)) {
+                filtered.add(entry);
+            } else if (NativeHomeView.ACTION_TV.equals(category) && isTv(entry)) {
+                filtered.add(entry);
+            } else if (NativeHomeView.ACTION_OTHER.equals(category) && !isMovie(entry) && !isTv(entry)) {
+                filtered.add(entry);
+            }
+        }
+        return filtered;
+    }
+
+    private boolean isMovie(FnosFileEntry entry) {
+        if (entry == null || !entry.isVideo()) {
+            return false;
+        }
+        String name = entry.name.toLowerCase();
+        return !isTv(entry) && (name.endsWith(".mp4")
+                || name.endsWith(".mkv")
+                || name.endsWith(".avi")
+                || name.endsWith(".mov")
+                || name.endsWith(".wmv")
+                || name.endsWith(".rmvb"));
+    }
+
+    private boolean isTv(FnosFileEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+        String name = entry.name.toLowerCase();
+        String path = entry.path.toLowerCase();
+        return name.indexOf("s01") >= 0
+                || name.indexOf("e01") >= 0
+                || name.indexOf("第") >= 0
+                || path.indexOf("tv") >= 0
+                || path.indexOf("series") >= 0
+                || path.indexOf("电视剧") >= 0;
     }
 
     private String parentPath(String path) {
