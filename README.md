@@ -4,6 +4,10 @@ fnOSTV 是支持安卓 4 的旧版电视客户端。
 
 这是参考 `QiaoKes/fntv-electron` 思路实现的 Android 4.x 兼容版 fnOSTV 客户端。Electron 版本把飞牛影视 Web 端包成桌面应用，并加入服务器配置、账号状态、Cookie 保持、播放增强和本地代理等能力；Android 4 版本采用更轻的原生 WebView 外壳，以保证旧电视盒子和旧平板能启动。
 
+## 开源协议
+
+本项目采用 MIT License 开源，详见 [LICENSE](LICENSE)。开源使用、分发、贡献和发布要求见 [OPEN_SOURCE.md](OPEN_SOURCE.md)，项目声明见 [NOTICE](NOTICE)。
+
 ## 已实现
 
 - Android 原生 Java 工程，无 AndroidX、Kotlin、Compose 等现代运行时依赖。
@@ -47,7 +51,6 @@ scripts\build-debug.cmd
 ```
 
 脚本会使用项目内 `.tooling` 目录中的 JDK 11、Gradle 6.7.1 和 Android SDK；`.tooling`、`local.properties`、构建产物均不会提交到 Git。
-
 当前已验证生成：
 
 ```text
@@ -61,6 +64,34 @@ app\build\outputs\apk\debug\app-debug.apk
 3. 可填写账号密码并开启自动登录。
 4. 保存后进入 Web 端。
 5. 遥控器菜单键可重新打开设置页。
+
+## 本地模拟器调试
+
+准备 Android 4.4 x86 模拟器：
+
+```powershell
+scripts\setup-emulator.cmd
+```
+
+启动模拟器：
+
+```powershell
+scripts\start-emulator.cmd
+```
+
+安装并启动 debug 包：
+
+```powershell
+scripts\install-debug.cmd
+```
+
+查看应用相关日志：
+
+```powershell
+scripts\logcat-app.cmd
+```
+
+模拟器名称为 `fnostv_api19`，数据保存在项目内 `.tooling\avd`。
 
 ## Android 4 注意事项
 
