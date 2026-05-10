@@ -161,11 +161,19 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     @Override
     public boolean openSettings() {
+        return openSettings(null);
+    }
+
+    private boolean openSettings(String errorMessage) {
         if (settingsOpen) {
             return true;
         }
         settingsOpen = true;
-        startActivityForResult(new Intent(this, SettingsActivity.class), Constants.REQUEST_SETTINGS);
+        Intent intent = new Intent(this, SettingsActivity.class);
+        if (errorMessage != null && errorMessage.length() > 0) {
+            intent.putExtra(Constants.EXTRA_SETTINGS_ERROR_MESSAGE, errorMessage);
+        }
+        startActivityForResult(intent, Constants.REQUEST_SETTINGS);
         return true;
     }
 
@@ -219,8 +227,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 @Override
                 public void onReceiveValue(String value) {
                     Logger.d("Page probe result=" + value);
-                    if (isPageProbeBlank(value)) {
-                        handleServerConnectionFailure("连接服务器失败：页面无响应");
+                    String failureMessage = pageProbeFailureMessage(value);
+                    if (failureMessage != null) {
+                        handleServerConnectionFailure(failureMessage);
                     } else {
                         markPageUsable(view);
                     }
@@ -249,18 +258,29 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 + "var text=read(body);"
                 + "text=text.replace(/\\s+/g,'');"
                 + "var nodes=body.getElementsByTagName('*').length;"
-                + "return text.length+'|'+nodes;"
+                + "var modules=document.querySelectorAll('script[type=module]').length;"
+                + "var root=document.getElementById('root');"
+                + "var rootChildren=root?root.childNodes.length:-1;"
+                + "return text.length+'|'+nodes+'|'+modules+'|'+rootChildren;"
                 + "}catch(e){return '0|0';}})()";
     }
 
-    private boolean isPageProbeBlank(String value) {
+    private String pageProbeFailureMessage(String value) {
         if (value == null) {
-            return true;
+            return "连接服务器失败：页面无响应";
         }
         String normalized = value.replace("\"", "").trim();
-        int separator = normalized.indexOf('|');
-        String textLengthValue = separator >= 0 ? normalized.substring(0, separator) : normalized;
-        return parseInt(textLengthValue) <= 0;
+        String[] parts = normalized.split("\\|");
+        int textLength = parts.length > 0 ? parseInt(parts[0]) : 0;
+        int moduleScripts = parts.length > 2 ? parseInt(parts[2]) : 0;
+        int rootChildren = parts.length > 3 ? parseInt(parts[3]) : -1;
+        if (textLength > 0) {
+            return null;
+        }
+        if (moduleScripts > 0 && rootChildren == 0) {
+            return "当前 fnOS 页面依赖新版浏览器内核，Android 4 WebView 不支持 ES Module，登录页无法渲染。请使用兼容版服务端、代理转换页面，或换用新版 Android/WebView 环境。";
+        }
+        return "连接服务器失败：页面无响应";
     }
 
     private int parseInt(String value) {
@@ -296,7 +316,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         Logger.w(message);
         showStatus(message + "\n正在返回登录设置页");
         webView.stopLoading();
-        openSettings();
+        openSettings(message);
     }
 
     private boolean isWebViewErrorPage(WebView view) {

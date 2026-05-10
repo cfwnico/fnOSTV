@@ -35,6 +35,10 @@ public final class SettingsForm {
     }
 
     public View create(ServerProfile profile) {
+        return create(profile, null);
+    }
+
+    public View create(ServerProfile profile, String errorMessage) {
         ScrollView scrollView = new ScrollView(context);
         scrollView.setFillViewport(true);
         scrollView.setBackgroundColor(0xFF101820);
@@ -58,6 +62,16 @@ public final class SettingsForm {
         hint.setTextColor(0xFFB6C2C0);
         hint.setTextSize(16);
         panel.addView(hint, rowParams());
+
+        if (errorMessage != null && errorMessage.length() > 0) {
+            TextView error = new TextView(context);
+            error.setText(errorMessage);
+            error.setTextColor(0xFFFFD4D4);
+            error.setTextSize(16);
+            error.setPadding(dp(12), dp(10), dp(12), dp(10));
+            error.setBackgroundColor(0xFF4A2024);
+            panel.addView(error, rowParams());
+        }
 
         urlInput = input("服务器地址，例如 http://192.168.1.20:5666", false);
         urlInput.setText(profile.baseUrl);
