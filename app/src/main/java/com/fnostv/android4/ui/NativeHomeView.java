@@ -143,9 +143,9 @@ public final class NativeHomeView {
         title.setTextColor(FnosTheme.COLOR_TEXT);
         title.setTextSize(21);
         top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        top.addView(iconButton("搜", ACTION_SEARCH), iconParams());
-        top.addView(iconButton("人", ACTION_USER), iconParams());
-        top.addView(iconButton("设", ACTION_SETTINGS), iconParams());
+        top.addView(iconButton(FnosActionIconButton.TYPE_SEARCH, ACTION_SEARCH), iconParams());
+        top.addView(iconButton(FnosActionIconButton.TYPE_USER, ACTION_USER), iconParams());
+        top.addView(iconButton(FnosActionIconButton.TYPE_SETTINGS, ACTION_SETTINGS), iconParams());
         content.addView(top, rowParams(0, 28));
 
         content.addView(sectionTitle("媒体库"), rowParams(0, 12));
@@ -249,12 +249,8 @@ public final class NativeHomeView {
         return card;
     }
 
-    private TextView iconButton(String label, final String action) {
-        TextView button = new TextView(context);
-        button.setText(label);
-        button.setTextColor(FnosTheme.COLOR_TEXT);
-        button.setTextSize(14);
-        button.setGravity(Gravity.CENTER);
+    private View iconButton(String iconType, final String action) {
+        FnosActionIconButton button = new FnosActionIconButton(context, iconType);
         FocusStyler.applyButton(button);
         button.setOnClickListener(new View.OnClickListener() {
             @Override
