@@ -20,15 +20,13 @@ import android.widget.TextView;
 
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosPlaybackSource;
+import com.fnostv.android4.player.IjkPlayerEngine;
+import com.fnostv.android4.player.PlayerEngine;
 import com.fnostv.android4.util.Logger;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-
-import tv.danmaku.ijk.media.player.IMediaPlayer;
-import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
 public final class NativeVideoPlayerView {
     public interface Listener {
@@ -43,7 +41,6 @@ public final class NativeVideoPlayerView {
     private static final int MODE_FILL = 0;
     private static final int MODE_FIT = 1;
     private static final float[] SPEEDS = new float[]{1.0f, 1.25f, 1.5f, 2.0f, 0.75f};
-    private static boolean ijkLoaded;
 
     private final Context context;
     private final Listener listener;
@@ -64,7 +61,7 @@ public final class NativeVideoPlayerView {
     private SurfaceHolder surfaceHolder;
     private FnosFileEntry currentEntry;
     private String currentUrl = "";
-    private IjkMediaPlayer currentPlayer;
+    private PlayerEngine currentPlayer;
     private boolean surfaceReady;
     private boolean dragging;
     private boolean suppressErrors;
@@ -121,7 +118,7 @@ public final class NativeVideoPlayerView {
                 surfaceHolder = holder;
                 surfaceReady = true;
                 if (currentPlayer != null) {
-                    currentPlayer.setDisplay(holder);
+                    currentPlayer.attachSurface(holder);
                 } else if (currentUrl.length() > 0 && view.getVisibility() == View.VISIBLE) {
                     startPlayer();
                 }
@@ -137,7 +134,7 @@ public final class NativeVideoPlayerView {
                 surfaceReady = false;
                 surfaceHolder = null;
                 if (currentPlayer != null) {
-                    currentPlayer.setDisplay(null);
+                    currentPlayer.detachSurface();
                 }
             }
         });
@@ -357,66 +354,84 @@ public final class NativeVideoPlayerView {
             return;
         }
         try {
-            ensureIjkLoaded();
-            IjkMediaPlayer player = new IjkMediaPlayer();
-            configurePlayer(player, preferHardwareCodec);
+            final PlayerEngine player = createPlayerEngine();
             currentPlayer = player;
-            player.setDisplay(surfaceHolder);
-            player.setOnPreparedListener(new IMediaPlayer.OnPreparedListener() {
+            player.attachSurface(surfaceHolder);
+            player.setListener(new PlayerEngine.Listener() {
                 @Override
-                public void onPrepared(IMediaPlayer mediaPlayer) {
+                public void onPrepared(int width, int height, int durationMs) {
                     handler.removeCallbacks(prepareTimeoutRunnable);
                     prepared = true;
-                    videoWidth = mediaPlayer.getVideoWidth();
-                    videoHeight = mediaPlayer.getVideoHeight();
+                    videoWidth = width;
+                    videoHeight = height;
                     videoView.setVideoSize(videoWidth, videoHeight);
                     loadingView.setVisibility(View.GONE);
-                    mediaPlayer.start();
+                    player.start();
                     if (pendingSeekMs > 0) {
-                        mediaPlayer.seekTo(pendingSeekMs);
+                        player.seekTo(pendingSeekMs);
                         pendingSeekMs = -1;
                     }
                     applyPlaybackSpeed(SPEEDS[speedIndex]);
-                    Logger.d("IJK prepared file=" + fileName() + " format=" + formatLabel()
+                    Logger.d(player.name() + " prepared file=" + fileName() + " format=" + formatLabel()
                             + " hw=" + preferHardwareCodec
                             + " source=" + currentSource().label
                             + " size=" + videoWidth + "x" + videoHeight
-                            + " duration=" + mediaPlayer.getDuration());
+                            + " duration=" + durationMs);
                     updateProgress();
                     updateControlText();
                     showControlsTemporarily();
                 }
-            });
-            player.setOnVideoSizeChangedListener(new IMediaPlayer.OnVideoSizeChangedListener() {
+
                 @Override
-                public void onVideoSizeChanged(IMediaPlayer mediaPlayer, int width, int height, int sarNum, int sarDen) {
+                public void onVideoSizeChanged(int width, int height) {
                     videoWidth = width;
                     videoHeight = height;
                     videoView.setVideoSize(videoWidth, videoHeight);
                     updateControlText();
                 }
-            });
-            player.setOnErrorListener(new IMediaPlayer.OnErrorListener() {
                 @Override
-                public boolean onError(IMediaPlayer mediaPlayer, int what, int extra) {
+                public void onBufferingStart(int extra) {
+                    bufferingCount++;
+                    loadingView.setVisibility(View.VISIBLE);
+                    Logger.w(player.name() + " buffering start file=" + fileName()
+                            + " count=" + bufferingCount
+                            + " source=" + currentSource().label
+                            + " pos=" + position()
+                            + " extra=" + extra);
+                }
+
+                @Override
+                public void onBufferingEnd(int extra) {
+                    loadingView.setVisibility(View.GONE);
+                    Logger.d(player.name() + " buffering end file=" + fileName()
+                            + " source=" + currentSource().label
+                            + " pos=" + position()
+                            + " extra=" + extra);
+                }
+
+                @Override
+                public void onFirstFrame() {
+                    Logger.d(player.name() + " first frame file=" + fileName()
+                            + " source=" + currentSource().label
+                            + " pos=" + position());
+                }
+
+                @Override
+                public void onError(String reason) {
                     loadingView.setVisibility(View.GONE);
                     if (suppressErrors || currentUrl.length() == 0) {
-                        return true;
+                        return;
                     }
-                    notifyPlaybackError("播放器错误 what=" + what + " extra=" + extra);
-                    return true;
+                    notifyPlaybackError(reason);
                 }
-            });
-            player.setOnInfoListener(new IMediaPlayer.OnInfoListener() {
+
                 @Override
-                public boolean onInfo(IMediaPlayer mediaPlayer, int what, int extra) {
-                    handlePlayerInfo(what, extra);
-                    return false;
+                public void onLog(String message) {
+                    Logger.d(player.name() + " " + message + " file=" + fileName());
                 }
             });
-            player.setDataSource(currentUrl);
-            player.prepareAsync();
-            Logger.d("IJK preparing file=" + fileName() + " format=" + formatLabel()
+            player.prepare(currentUrl, preferHardwareCodec);
+            Logger.d(player.name() + " preparing file=" + fileName() + " format=" + formatLabel()
                     + " hw=" + preferHardwareCodec
                     + " source=" + currentSource().label
                     + " url=" + redactedUrl(currentUrl));
@@ -426,31 +441,8 @@ public final class NativeVideoPlayerView {
         }
     }
 
-    private static synchronized void ensureIjkLoaded() {
-        if (!ijkLoaded) {
-            IjkMediaPlayer.loadLibrariesOnce(null);
-            ijkLoaded = true;
-        }
-    }
-
-    private void configurePlayer(IjkMediaPlayer player, boolean hardwareCodec) {
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", hardwareCodec ? 1 : 0);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", hardwareCodec ? 1 : 5);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 4 * 1024 * 1024);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 2);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 30000);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 0);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 0);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzemaxduration", 100L);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32 * 1024L);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "fastseek");
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
+    private PlayerEngine createPlayerEngine() {
+        return new IjkPlayerEngine();
     }
 
     private void retryWithSoftwareCodec(String reason) {
@@ -468,40 +460,12 @@ public final class NativeVideoPlayerView {
         handler.postDelayed(prepareTimeoutRunnable, PREPARE_TIMEOUT_MS);
     }
 
-    private void handlePlayerInfo(int what, int extra) {
-        if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_START) {
-            bufferingCount++;
-            loadingView.setVisibility(View.VISIBLE);
-            Logger.w("IJK buffering start file=" + fileName()
-                    + " count=" + bufferingCount
-                    + " source=" + currentSource().label
-                    + " pos=" + position()
-                    + " extra=" + extra);
-            return;
-        }
-        if (what == IMediaPlayer.MEDIA_INFO_BUFFERING_END) {
-            loadingView.setVisibility(View.GONE);
-            Logger.d("IJK buffering end file=" + fileName()
-                    + " source=" + currentSource().label
-                    + " pos=" + position()
-                    + " extra=" + extra);
-            return;
-        }
-        if (what == IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
-            Logger.d("IJK first frame file=" + fileName()
-                    + " source=" + currentSource().label
-                    + " pos=" + position());
-            return;
-        }
-        Logger.d("IJK info what=" + what + " extra=" + extra + " file=" + fileName());
-    }
-
     private void releasePlayer(boolean clearCurrent) {
         if (currentPlayer == null) {
             return;
         }
         try {
-            currentPlayer.setDisplay(null);
+            currentPlayer.detachSurface();
             currentPlayer.stop();
         } catch (RuntimeException ignored) {
         }
@@ -597,16 +561,7 @@ public final class NativeVideoPlayerView {
         if (currentPlayer == null) {
             return speed == 1.0f;
         }
-        try {
-            Method method = currentPlayer.getClass().getMethod("setSpeed", float.class);
-            method.invoke(currentPlayer, speed);
-            if (!currentPlayer.isPlaying()) {
-                currentPlayer.start();
-            }
-            return true;
-        } catch (Exception ex) {
-            return speed == 1.0f;
-        }
+        return currentPlayer.setSpeed(speed);
     }
 
     private void cyclePictureMode() {
