@@ -30,6 +30,8 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.fnostv.android4.config.ProfileStore;
+import com.fnostv.android4.config.ServerProfile;
 import com.fnostv.android4.util.Constants;
 
 public final class MainActivity extends Activity {
@@ -40,7 +42,7 @@ public final class MainActivity extends Activity {
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
     private ProfileStore store;
-    private Profile profile;
+    private ServerProfile profile;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

@@ -17,6 +17,11 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.fnostv.android4.config.ProfileStore;
+import com.fnostv.android4.config.ProfileValidation;
+import com.fnostv.android4.config.ProfileValidator;
+import com.fnostv.android4.config.ServerProfile;
+
 public final class SettingsActivity extends Activity {
     private ProfileStore store;
     private EditText urlInput;
@@ -44,7 +49,7 @@ public final class SettingsActivity extends Activity {
         return super.onKeyDown(keyCode, event);
     }
 
-    private void buildLayout(Profile profile) {
+    private void buildLayout(ServerProfile profile) {
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
         scrollView.setBackgroundColor(0xFF101820);
@@ -118,14 +123,15 @@ public final class SettingsActivity extends Activity {
     }
 
     private void saveProfile() {
-        Profile profile = new Profile(
+        ServerProfile profile = new ServerProfile(
                 urlInput.getText().toString(),
                 usernameInput.getText().toString(),
                 passwordInput.getText().toString(),
                 autoLoginInput.isChecked(),
                 trustSslInput.isChecked());
-        if (!profile.isReady()) {
-            Toast.makeText(this, "请填写服务器地址", Toast.LENGTH_SHORT).show();
+        ProfileValidation validation = ProfileValidator.validate(profile);
+        if (!validation.isValid()) {
+            Toast.makeText(this, validation.getMessage(), Toast.LENGTH_SHORT).show();
             urlInput.requestFocus();
             return;
         }
