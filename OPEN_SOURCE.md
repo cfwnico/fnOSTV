@@ -47,4 +47,6 @@ scripts\build-release.cmd
 ## 当前第三方运行时依赖
 
 - OkHttp 3.12.13，Apache License 2.0，用于 Android 4 兼容网络层和 WebSocket。
-- IJKPlayer 0.8.8，LGPL-2.1，用于 Android 4 原生视频播放兼容，包含 FFmpeg 原生播放组件。分发 APK 时应保留 IJKPlayer/FFmpeg 相关许可证声明，不得移除 `NOTICE` 中的第三方组件说明。
+- LibVLC 3.1.12，LGPL-2.1-or-later，用作优先原生播放器内核，以提升 MKV、AVI、MOV、HLS、外挂字幕和更多音视频编码的兼容性。分发 APK 时应保留 VLC/LibVLC 相关许可证声明，并满足 LGPL 对动态链接组件的权利要求。
+- 引入 LibVLC 后，内置 VLC 播放器构建目标调整为 Android 4.2+（API 17+）。如需继续覆盖 Android 4.0/4.1，应保留不含 LibVLC 的 IJK-only 构建变体或使用外部播放器 Intent。
+- IJKPlayer 0.8.8，LGPL-2.1，用作 LibVLC 失败后的兼容兜底播放器，包含 FFmpeg 原生播放组件。分发 APK 时应保留 IJKPlayer/FFmpeg 相关许可证声明，不得移除 `NOTICE` 中的第三方组件说明。
