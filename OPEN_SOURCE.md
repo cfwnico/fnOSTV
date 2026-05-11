@@ -10,7 +10,7 @@
 
 ## 署名与声明
 
-- 项目名称、说明文档或发布页面中应保留对 `fnOSTV Android 4` 的来源说明。
+- 项目名称、说明文档或发布页面中应保留对 `fnOSTV Android` 的来源说明。
 - 本项目参考了 `QiaoKes/fntv-electron` 的公开实现思路；分发时建议保留 `NOTICE` 中的参考声明。
 - 不得使用原作者、参考项目或相关服务方的名称暗示未经授权的官方背书。
 
@@ -23,18 +23,30 @@
 ## 依赖与第三方组件
 
 - Android SDK、Gradle、JDK、emulator system images 等工具链由各自上游许可约束，本仓库不重新分发这些工具本体。
-- 如果未来引入第三方库、图片、字体、图标、音视频资源或其他素材，必须确认其许可证允许在本项目中使用和分发。
-- 引入第三方组件时，应在 README、NOTICE 或单独的依赖清单中补充名称、来源和许可证。
+- 引入第三方库、图片、字体、图标、音视频资源或其他素材时，必须确认其许可证允许在本项目中使用和分发。
+- 引入第三方组件时，应在 README、NOTICE 或单独依赖清单中补充名称、来源和许可证。
+
+## 当前第三方运行时依赖
+
+- OkHttp 3.12.13，Apache License 2.0，用于 Android 4 兼容网络层和 WebSocket。
+- LibVLC 3.1.12，LGPL-2.1-or-later，用作优先原生播放器内核，以提升 MKV、AVI、MOV、HLS、外挂字幕和更多音视频编码的兼容性。分发 APK 时应保留 VLC/LibVLC 相关许可证声明，并满足 LGPL 对动态链接组件的权利要求。
+- IJKPlayer 0.8.8，LGPL-2.1，用作 LibVLC 失败后的兼容兜底播放器，包含 FFmpeg 原生播放组件。分发 APK 时应保留 IJKPlayer/FFmpeg 相关许可证声明，不得移除 `NOTICE` 中的第三方组件说明。
+
+## Android 兼容边界
+
+- 当前默认构建因为引入 LibVLC，最低系统要求为 Android 4.2 / API 17。
+- 如果需要覆盖 Android 4.0/4.1，应维护一个不包含 LibVLC 的 IJK-only 构建变体，或改为使用外部播放器 Intent。
+- 新增功能应尽量保持旧设备兼容，不主动引入 AndroidX、Kotlin、Compose 或要求较高 API 的运行时依赖，除非维护者明确接受该兼容性变化。
 
 ## 贡献要求
 
 - 贡献者提交代码时，应确认自己有权提交这些代码，并同意按 MIT License 授权给本项目。
 - 不接受来源不明、许可证不兼容、包含商业闭源素材或包含敏感信息的贡献。
-- 新增功能应尽量保持 Android 4.x 兼容目标，不主动引入 AndroidX、Kotlin、Compose 或要求较高 API 的运行时依赖，除非维护者明确接受该兼容性变化。
+- 播放器、网络、登录和存储相关改动应补充必要日志或验证说明，便于旧设备问题排查。
 
 ## 发布要求
 
-- 发布 APK 前应执行至少一次本地构建验证：
+- 发布 APK 前应至少执行一次本地构建验证：
 
 ```powershell
 scripts\build-debug.cmd
@@ -43,10 +55,3 @@ scripts\build-release.cmd
 
 - 发布 release APK 前应确认签名状态，并妥善保存对应 keystore。
 - 发布包不应包含 `.tooling/`、`local.properties`、`keystore.properties`、`signing/`、构建缓存或本地调试数据。
-
-## 当前第三方运行时依赖
-
-- OkHttp 3.12.13，Apache License 2.0，用于 Android 4 兼容网络层和 WebSocket。
-- LibVLC 3.1.12，LGPL-2.1-or-later，用作优先原生播放器内核，以提升 MKV、AVI、MOV、HLS、外挂字幕和更多音视频编码的兼容性。分发 APK 时应保留 VLC/LibVLC 相关许可证声明，并满足 LGPL 对动态链接组件的权利要求。
-- 引入 LibVLC 后，内置 VLC 播放器构建目标调整为 Android 4.2+（API 17+）。如需继续覆盖 Android 4.0/4.1，应保留不含 LibVLC 的 IJK-only 构建变体或使用外部播放器 Intent。
-- IJKPlayer 0.8.8，LGPL-2.1，用作 LibVLC 失败后的兼容兜底播放器，包含 FFmpeg 原生播放组件。分发 APK 时应保留 IJKPlayer/FFmpeg 相关许可证声明，不得移除 `NOTICE` 中的第三方组件说明。
