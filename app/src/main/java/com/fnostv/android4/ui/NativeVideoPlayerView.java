@@ -41,6 +41,8 @@ public final class NativeVideoPlayerView {
     private static final int CONTROL_HIDE_DELAY_MS = 5000;
     private static final int PROGRESS_INTERVAL_MS = 1000;
     private static final int PREPARE_TIMEOUT_MS = 20000;
+    private static final int SEEK_COMMIT_DELAY_MS = 180;
+    private static final int SEEK_SETTLE_DELAY_MS = 900;
     private static final int MODE_FIT = 0;
     private static final int MODE_FILL = 1;
     private static final float[] SPEEDS = new float[]{1.0f, 1.25f, 1.5f, 2.0f, 0.75f};
@@ -68,6 +70,7 @@ public final class NativeVideoPlayerView {
     private PlaybackOptions playbackOptions;
     private boolean surfaceReady;
     private boolean dragging;
+    private boolean seeking;
     private boolean suppressErrors;
     private boolean prepared;
     private boolean preferHardwareCodec;
@@ -77,7 +80,8 @@ public final class NativeVideoPlayerView {
     private int speedIndex;
     private int sourceIndex;
     private int pendingSeekMs = -1;
-    private int pictureMode = MODE_FIT;
+    private int pendingSeekRequestMs = -1;
+    private int pictureMode = MODE_FILL;
     private int videoWidth;
     private int videoHeight;
 
@@ -104,6 +108,22 @@ public final class NativeVideoPlayerView {
             }
         }
     };
+    private final Runnable seekCommitRunnable = new Runnable() {
+        @Override
+        public void run() {
+            commitPendingSeek();
+        }
+    };
+    private final Runnable seekSettledRunnable = new Runnable() {
+        @Override
+        public void run() {
+            seeking = false;
+            if (prepared) {
+                loadingView.setVisibility(View.GONE);
+            }
+            updateProgress();
+        }
+    };
 
     public NativeVideoPlayerView(Context context, Listener listener) {
         this.context = context;
@@ -124,6 +144,7 @@ public final class NativeVideoPlayerView {
                 surfaceReady = true;
                 if (currentPlayer != null) {
                     currentPlayer.attachSurface(holder, videoView.getWidth(), videoView.getHeight());
+                    currentPlayer.setFillMode(pictureMode == MODE_FILL);
                 } else if (currentUrl.length() > 0 && view.getVisibility() == View.VISIBLE) {
                     startPlayer();
                 }
@@ -200,7 +221,7 @@ public final class NativeVideoPlayerView {
             @Override
             public void onStopTrackingTouch(SeekBar bar) {
                 dragging = false;
-                seekTo(progressToPosition(bar.getProgress()));
+                requestSeekTo(progressToPosition(bar.getProgress()));
                 showControlsTemporarily();
             }
         });
@@ -257,6 +278,8 @@ public final class NativeVideoPlayerView {
         currentUrl = currentSource().url;
         playbackOptions = buildPlaybackOptions(currentUrl);
         pendingSeekMs = -1;
+        pendingSeekRequestMs = -1;
+        seeking = false;
         suppressErrors = false;
         prepared = false;
         preferHardwareCodec = entry != null && entry.prefersHardwarePlayback();
@@ -347,6 +370,8 @@ public final class NativeVideoPlayerView {
         handler.removeCallbacks(progressRunnable);
         handler.removeCallbacks(hideControlsRunnable);
         handler.removeCallbacks(prepareTimeoutRunnable);
+        handler.removeCallbacks(seekCommitRunnable);
+        handler.removeCallbacks(seekSettledRunnable);
         suppressErrors = true;
         releasePlayer(true);
         view.setVisibility(View.GONE);
@@ -356,7 +381,9 @@ public final class NativeVideoPlayerView {
         playbackSources.clear();
         sourceIndex = 0;
         pendingSeekMs = -1;
+        pendingSeekRequestMs = -1;
         prepared = false;
+        seeking = false;
     }
 
     private void startPlayer() {
@@ -367,6 +394,7 @@ public final class NativeVideoPlayerView {
             final PlayerEngine player = createPlayerEngine();
             currentPlayer = player;
             player.attachSurface(surfaceHolder, videoView.getWidth(), videoView.getHeight());
+            player.setFillMode(pictureMode == MODE_FILL);
             player.setListener(new PlayerEngine.Listener() {
                 @Override
                 public void onPrepared(int width, int height, int durationMs) {
@@ -602,20 +630,46 @@ public final class NativeVideoPlayerView {
     }
 
     private void seekBy(int deltaMs) {
-        int target = Math.max(0, Math.min(duration(), position() + deltaMs));
-        seekTo(target);
+        int base = pendingSeekRequestMs >= 0 ? pendingSeekRequestMs : position();
+        int target = Math.max(0, Math.min(duration(), base + deltaMs));
+        requestSeekTo(target);
         int seconds = Math.abs(deltaMs) / 1000;
         showHint(deltaMs > 0 ? "快进 " + seconds + " 秒" : "快退 " + seconds + " 秒");
         showControlsTemporarily();
     }
 
-    private void seekTo(int targetMs) {
+    private void requestSeekTo(int targetMs) {
+        pendingSeekRequestMs = Math.max(0, targetMs);
+        seeking = true;
+        loadingView.setVisibility(View.VISIBLE);
+        int duration = duration();
+        if (duration > 0) {
+            seekBar.setProgress(toSeekBarProgress(pendingSeekRequestMs, duration));
+        }
+        updateTimeLabel(pendingSeekRequestMs, duration);
+        handler.removeCallbacks(seekCommitRunnable);
+        handler.removeCallbacks(seekSettledRunnable);
+        handler.postDelayed(seekCommitRunnable, SEEK_COMMIT_DELAY_MS);
+    }
+
+    private void commitPendingSeek() {
+        if (pendingSeekRequestMs < 0) {
+            return;
+        }
+        int targetMs = pendingSeekRequestMs;
+        pendingSeekRequestMs = -1;
         try {
             if (currentPlayer != null) {
                 currentPlayer.seekTo(targetMs);
             }
-            updateProgress();
+            pendingSeekMs = targetMs;
+            handler.removeCallbacks(seekSettledRunnable);
+            handler.postDelayed(seekSettledRunnable, SEEK_SETTLE_DELAY_MS);
         } catch (RuntimeException ignored) {
+            seeking = false;
+            if (prepared) {
+                loadingView.setVisibility(View.GONE);
+            }
             showHint("暂时无法跳转");
         }
     }
@@ -643,6 +697,9 @@ public final class NativeVideoPlayerView {
     private void cyclePictureMode() {
         pictureMode = pictureMode == MODE_FILL ? MODE_FIT : MODE_FILL;
         videoView.setResizeMode(pictureMode);
+        if (currentPlayer != null) {
+            currentPlayer.setFillMode(pictureMode == MODE_FILL);
+        }
         updateControlText();
         showHint(pictureMode == MODE_FILL ? "画面铺满" : "画面适应");
         showControlsTemporarily();
@@ -659,6 +716,10 @@ public final class NativeVideoPlayerView {
         currentUrl = currentSource().url;
         playbackOptions = buildPlaybackOptions(currentUrl);
         pendingSeekMs = savedPosition;
+        pendingSeekRequestMs = -1;
+        seeking = false;
+        handler.removeCallbacks(seekCommitRunnable);
+        handler.removeCallbacks(seekSettledRunnable);
         prepared = false;
         retriedSoftwareCodec = false;
         retriedIjkEngine = false;
@@ -678,13 +739,13 @@ public final class NativeVideoPlayerView {
     }
 
     private void updateProgress() {
-        if (!isVisible() || dragging) {
+        if (!isVisible() || dragging || seeking) {
             return;
         }
         int duration = duration();
         int position = position();
         if (duration > 0) {
-            seekBar.setProgress(Math.max(0, Math.min(1000, position * 1000 / duration)));
+            seekBar.setProgress(toSeekBarProgress(position, duration));
         } else {
             seekBar.setProgress(0);
         }
@@ -725,7 +786,11 @@ public final class NativeVideoPlayerView {
 
     private int progressToPosition(int progress) {
         int duration = duration();
-        return duration <= 0 ? 0 : duration * progress / 1000;
+        return duration <= 0 ? 0 : (int) ((long) duration * Math.max(0, Math.min(1000, progress)) / 1000L);
+    }
+
+    private int toSeekBarProgress(int position, int duration) {
+        return duration <= 0 ? 0 : (int) Math.max(0L, Math.min(1000L, (long) position * 1000L / (long) duration));
     }
 
     private String formatTime(int ms) {
@@ -752,7 +817,7 @@ public final class NativeVideoPlayerView {
     }
 
     private void hideControls() {
-        if (isVisible() && currentPlayer != null && currentPlayer.isPlaying()) {
+        if (isVisible() && !seeking && currentPlayer != null && currentPlayer.isPlaying()) {
             controlBar.setVisibility(View.GONE);
             titleView.setVisibility(View.GONE);
         }
@@ -813,17 +878,6 @@ public final class NativeVideoPlayerView {
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             int width = MeasureSpec.getSize(widthMeasureSpec);
             int height = MeasureSpec.getSize(heightMeasureSpec);
-            if (resizeMode == MODE_FILL || videoWidth <= 0 || videoHeight <= 0) {
-                setMeasuredDimension(width, height);
-                return;
-            }
-            float videoAspect = (float) videoWidth / (float) videoHeight;
-            float viewAspect = height == 0 ? videoAspect : (float) width / (float) height;
-            if (videoAspect > viewAspect) {
-                height = (int) (width / videoAspect);
-            } else {
-                width = (int) (height * videoAspect);
-            }
             setMeasuredDimension(width, height);
         }
     }

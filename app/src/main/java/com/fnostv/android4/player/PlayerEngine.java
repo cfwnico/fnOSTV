@@ -27,6 +27,8 @@ public interface PlayerEngine {
 
     void resizeSurface(int width, int height);
 
+    void setFillMode(boolean fillMode);
+
     void detachSurface();
 
     void prepare(String url, PlaybackOptions options) throws Exception;

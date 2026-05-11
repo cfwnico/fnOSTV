@@ -20,6 +20,7 @@ public final class VlcPlayerEngine implements PlayerEngine {
     private int surfaceWidth;
     private int surfaceHeight;
     private boolean prepared;
+    private boolean fillMode;
 
     public VlcPlayerEngine(Context context) {
         this.context = context.getApplicationContext();
@@ -48,8 +49,7 @@ public final class VlcPlayerEngine implements PlayerEngine {
             }
             out.setVideoSurface(holder.getSurface(), holder);
             out.attachViews();
-            player.setAspectRatio(null);
-            player.setScale(0);
+            applyDisplayMode();
         }
     }
 
@@ -59,9 +59,14 @@ public final class VlcPlayerEngine implements PlayerEngine {
         surfaceHeight = Math.max(0, height);
         if (player != null && surfaceWidth > 0 && surfaceHeight > 0) {
             player.getVLCVout().setWindowSize(surfaceWidth, surfaceHeight);
-            player.setAspectRatio(null);
-            player.setScale(0);
+            applyDisplayMode();
         }
+    }
+
+    @Override
+    public void setFillMode(boolean fillMode) {
+        this.fillMode = fillMode;
+        applyDisplayMode();
     }
 
     @Override
@@ -234,5 +239,17 @@ public final class VlcPlayerEngine implements PlayerEngine {
             return;
         }
         listener.onLog("event type=" + event.type);
+    }
+
+    private void applyDisplayMode() {
+        if (player == null) {
+            return;
+        }
+        if (fillMode && surfaceWidth > 0 && surfaceHeight > 0) {
+            player.setAspectRatio(surfaceWidth + ":" + surfaceHeight);
+        } else {
+            player.setAspectRatio(null);
+        }
+        player.setScale(0);
     }
 }

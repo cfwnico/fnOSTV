@@ -35,6 +35,10 @@ public final class IjkPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public void setFillMode(boolean fillMode) {
+    }
+
+    @Override
     public void detachSurface() {
         if (player != null) {
             player.setDisplay(null);
