@@ -22,6 +22,7 @@ import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosPlaybackSource;
 import com.fnostv.android4.player.IjkPlayerEngine;
 import com.fnostv.android4.player.PlayerEngine;
+import com.fnostv.android4.player.PlaybackOptions;
 import com.fnostv.android4.player.VlcPlayerEngine;
 import com.fnostv.android4.util.Logger;
 
@@ -63,6 +64,7 @@ public final class NativeVideoPlayerView {
     private FnosFileEntry currentEntry;
     private String currentUrl = "";
     private PlayerEngine currentPlayer;
+    private PlaybackOptions playbackOptions;
     private boolean surfaceReady;
     private boolean dragging;
     private boolean suppressErrors;
@@ -252,6 +254,7 @@ public final class NativeVideoPlayerView {
         }
         sourceIndex = 0;
         currentUrl = currentSource().url;
+        playbackOptions = PlaybackOptions.forUrl(currentUrl, entry != null && entry.prefersHardwarePlayback());
         pendingSeekMs = -1;
         suppressErrors = false;
         prepared = false;
@@ -380,6 +383,7 @@ public final class NativeVideoPlayerView {
                     applyPlaybackSpeed(SPEEDS[speedIndex]);
                     Logger.d(player.name() + " prepared file=" + fileName() + " format=" + formatLabel()
                             + " hw=" + preferHardwareCodec
+                            + " options=" + optionsLabel()
                             + " source=" + currentSource().label
                             + " size=" + videoWidth + "x" + videoHeight
                             + " duration=" + durationMs);
@@ -436,9 +440,10 @@ public final class NativeVideoPlayerView {
                     Logger.d(player.name() + " " + message + " file=" + fileName());
                 }
             });
-            player.prepare(currentUrl, preferHardwareCodec);
+            player.prepare(currentUrl, playbackOptions);
             Logger.d(player.name() + " preparing file=" + fileName() + " format=" + formatLabel()
                     + " hw=" + preferHardwareCodec
+                    + " options=" + optionsLabel()
                     + " source=" + currentSource().label
                     + " url=" + redactedUrl(currentUrl));
         } catch (Exception ex) {
@@ -458,6 +463,9 @@ public final class NativeVideoPlayerView {
         Logger.w(engineName() + " retry software file=" + fileName() + " reason=" + reason);
         retriedSoftwareCodec = true;
         preferHardwareCodec = false;
+        playbackOptions = playbackOptions == null
+                ? PlaybackOptions.forUrl(currentUrl, false)
+                : playbackOptions.withSoftwareDecoder();
         prepared = false;
         loadingView.setVisibility(View.VISIBLE);
         showHint(reason);
@@ -474,6 +482,7 @@ public final class NativeVideoPlayerView {
         retriedIjkEngine = true;
         retriedSoftwareCodec = false;
         preferHardwareCodec = currentEntry != null && currentEntry.prefersHardwarePlayback();
+        playbackOptions = PlaybackOptions.forUrl(currentUrl, preferHardwareCodec);
         prepared = false;
         loadingView.setVisibility(View.VISIBLE);
         showHint("VLC播放失败，切换兼容播放器");
@@ -505,6 +514,7 @@ public final class NativeVideoPlayerView {
         handler.removeCallbacks(prepareTimeoutRunnable);
         Logger.w(engineName() + " playback error file=" + fileName() + " format=" + formatLabel()
                 + " hw=" + preferHardwareCodec
+                + " options=" + optionsLabel()
                 + " source=" + currentSource().label
                 + " reason=" + reason);
         if (!retriedIjkEngine && !"IJK".equals(engineName())) {
@@ -538,6 +548,10 @@ public final class NativeVideoPlayerView {
 
     private String engineName() {
         return currentPlayer == null ? "Player" : currentPlayer.name();
+    }
+
+    private String optionsLabel() {
+        return playbackOptions == null ? "" : playbackOptions.describe();
     }
 
     private String redactedUrl(String url) {
@@ -614,6 +628,7 @@ public final class NativeVideoPlayerView {
         int savedPosition = position();
         sourceIndex = (sourceIndex + 1) % playbackSources.size();
         currentUrl = currentSource().url;
+        playbackOptions = PlaybackOptions.forUrl(currentUrl, currentEntry != null && currentEntry.prefersHardwarePlayback());
         pendingSeekMs = savedPosition;
         prepared = false;
         retriedSoftwareCodec = false;

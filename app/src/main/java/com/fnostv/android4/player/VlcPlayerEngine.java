@@ -73,13 +73,19 @@ public final class VlcPlayerEngine implements PlayerEngine {
     }
 
     @Override
-    public void prepare(String url, boolean hardwareCodec) {
-        ArrayList<String> options = new ArrayList<String>();
-        options.add("--network-caching=1500");
-        options.add("--file-caching=1500");
-        options.add("--drop-late-frames");
-        options.add("--skip-frames");
-        libVlc = new LibVLC(context, options);
+    public void prepare(String url, PlaybackOptions playbackOptions) {
+        PlaybackOptions playback = playbackOptions == null ? PlaybackOptions.forUrl(url, true) : playbackOptions;
+        ArrayList<String> vlcOptions = new ArrayList<String>();
+        vlcOptions.add("--network-caching=" + playback.networkCachingMs);
+        vlcOptions.add("--file-caching=" + playback.fileCachingMs);
+        if (playback.allowFrameDrop) {
+            vlcOptions.add("--drop-late-frames");
+            vlcOptions.add("--skip-frames");
+        } else {
+            vlcOptions.add("--no-drop-late-frames");
+            vlcOptions.add("--no-skip-frames");
+        }
+        libVlc = new LibVLC(context, vlcOptions);
         player = new MediaPlayer(libVlc);
         player.setEventListener(new MediaPlayer.EventListener() {
             @Override
@@ -91,9 +97,9 @@ public final class VlcPlayerEngine implements PlayerEngine {
             attachSurface(surfaceHolder, surfaceWidth, surfaceHeight);
         }
         Media media = new Media(libVlc, Uri.parse(url));
-        media.setHWDecoderEnabled(hardwareCodec, false);
-        media.addOption(":network-caching=1500");
-        media.addOption(":file-caching=1500");
+        media.setHWDecoderEnabled(playback.useHardwareDecoder(), false);
+        media.addOption(":network-caching=" + playback.networkCachingMs);
+        media.addOption(":file-caching=" + playback.fileCachingMs);
         media.addOption(":http-reconnect");
         player.setMedia(media);
         media.release();
