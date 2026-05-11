@@ -23,6 +23,7 @@ import com.fnostv.android4.net.FnosPlaybackSource;
 import com.fnostv.android4.player.IjkPlayerEngine;
 import com.fnostv.android4.player.PlayerEngine;
 import com.fnostv.android4.player.PlaybackOptions;
+import com.fnostv.android4.player.PlaybackStrategy;
 import com.fnostv.android4.player.VlcPlayerEngine;
 import com.fnostv.android4.util.Logger;
 
@@ -254,7 +255,7 @@ public final class NativeVideoPlayerView {
         }
         sourceIndex = 0;
         currentUrl = currentSource().url;
-        playbackOptions = PlaybackOptions.forUrl(currentUrl, entry != null && entry.prefersHardwarePlayback());
+        playbackOptions = buildPlaybackOptions(currentUrl);
         pendingSeekMs = -1;
         suppressErrors = false;
         prepared = false;
@@ -408,6 +409,10 @@ public final class NativeVideoPlayerView {
                             + " source=" + currentSource().label
                             + " pos=" + position()
                             + " extra=" + extra);
+                    if (bufferingCount == 3 && prepared && playbackOptions != null
+                            && playbackOptions.profileMode != PlaybackOptions.PROFILE_FLUENT) {
+                        retryWithFluentPlayback("缓冲频繁，切换流畅模式");
+                    }
                 }
 
                 @Override
@@ -464,7 +469,7 @@ public final class NativeVideoPlayerView {
         retriedSoftwareCodec = true;
         preferHardwareCodec = false;
         playbackOptions = playbackOptions == null
-                ? PlaybackOptions.forUrl(currentUrl, false)
+                ? buildPlaybackOptions(currentUrl).withSoftwareDecoder()
                 : playbackOptions.withSoftwareDecoder();
         prepared = false;
         loadingView.setVisibility(View.VISIBLE);
@@ -482,10 +487,28 @@ public final class NativeVideoPlayerView {
         retriedIjkEngine = true;
         retriedSoftwareCodec = false;
         preferHardwareCodec = currentEntry != null && currentEntry.prefersHardwarePlayback();
-        playbackOptions = PlaybackOptions.forUrl(currentUrl, preferHardwareCodec);
+        playbackOptions = buildPlaybackOptions(currentUrl);
         prepared = false;
         loadingView.setVisibility(View.VISIBLE);
         showHint("VLC播放失败，切换兼容播放器");
+        releasePlayer(true);
+        if (surfaceReady) {
+            startPlayer();
+        }
+        handler.removeCallbacks(prepareTimeoutRunnable);
+        handler.postDelayed(prepareTimeoutRunnable, PREPARE_TIMEOUT_MS);
+    }
+
+    private void retryWithFluentPlayback(String reason) {
+        Logger.w(engineName() + " fluent retry file=" + fileName() + " reason=" + reason
+                + " options=" + optionsLabel());
+        playbackOptions = PlaybackStrategy.onFrequentBuffering(playbackOptions);
+        prepared = false;
+        bufferingCount = 0;
+        int savedPosition = position();
+        pendingSeekMs = savedPosition > 0 ? savedPosition : pendingSeekMs;
+        loadingView.setVisibility(View.VISIBLE);
+        showHint(reason);
         releasePlayer(true);
         if (surfaceReady) {
             startPlayer();
@@ -552,6 +575,12 @@ public final class NativeVideoPlayerView {
 
     private String optionsLabel() {
         return playbackOptions == null ? "" : playbackOptions.describe();
+    }
+
+    private PlaybackOptions buildPlaybackOptions(String url) {
+        boolean preferHardware = currentEntry != null && currentEntry.prefersHardwarePlayback();
+        long size = currentEntry == null ? 0L : currentEntry.size;
+        return PlaybackStrategy.initialOptions(url, fileName(), size, preferHardware);
     }
 
     private String redactedUrl(String url) {
@@ -628,7 +657,7 @@ public final class NativeVideoPlayerView {
         int savedPosition = position();
         sourceIndex = (sourceIndex + 1) % playbackSources.size();
         currentUrl = currentSource().url;
-        playbackOptions = PlaybackOptions.forUrl(currentUrl, currentEntry != null && currentEntry.prefersHardwarePlayback());
+        playbackOptions = buildPlaybackOptions(currentUrl);
         pendingSeekMs = savedPosition;
         prepared = false;
         retriedSoftwareCodec = false;

@@ -198,7 +198,8 @@ public final class IjkPlayerEngine implements PlayerEngine {
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32 * 1024L);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "fastseek");
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter",
+                options == null || options.loopFilterSkip <= 0 ? 48 : options.loopFilterSkip);
     }
 
     private void handleInfo(int what, int extra) {

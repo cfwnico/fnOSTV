@@ -85,6 +85,12 @@ public final class VlcPlayerEngine implements PlayerEngine {
             vlcOptions.add("--no-drop-late-frames");
             vlcOptions.add("--no-skip-frames");
         }
+        if (playback.fastDecode) {
+            vlcOptions.add("--avcodec-fast");
+        }
+        if (playback.loopFilterSkip > 0) {
+            vlcOptions.add("--avcodec-skiploopfilter=" + playback.loopFilterSkip);
+        }
         libVlc = new LibVLC(context, vlcOptions);
         player = new MediaPlayer(libVlc);
         player.setEventListener(new MediaPlayer.EventListener() {
@@ -100,6 +106,12 @@ public final class VlcPlayerEngine implements PlayerEngine {
         media.setHWDecoderEnabled(playback.useHardwareDecoder(), false);
         media.addOption(":network-caching=" + playback.networkCachingMs);
         media.addOption(":file-caching=" + playback.fileCachingMs);
+        if (playback.fastDecode) {
+            media.addOption(":avcodec-fast");
+        }
+        if (playback.loopFilterSkip > 0) {
+            media.addOption(":avcodec-skiploopfilter=" + playback.loopFilterSkip);
+        }
         media.addOption(":http-reconnect");
         player.setMedia(media);
         media.release();
