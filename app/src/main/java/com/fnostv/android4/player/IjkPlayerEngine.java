@@ -42,10 +42,10 @@ public final class IjkPlayerEngine implements PlayerEngine {
     }
 
     @Override
-    public void prepare(String url, boolean hardwareCodec) throws Exception {
+    public void prepare(String url, PlaybackOptions options) throws Exception {
         ensureLoaded();
         player = new IjkMediaPlayer();
-        configurePlayer(player, hardwareCodec);
+        configurePlayer(player, options);
         player.setOnPreparedListener(new IMediaPlayer.OnPreparedListener() {
             @Override
             public void onPrepared(IMediaPlayer mediaPlayer) {
@@ -178,16 +178,19 @@ public final class IjkPlayerEngine implements PlayerEngine {
         }
     }
 
-    private void configurePlayer(IjkMediaPlayer player, boolean hardwareCodec) {
+    private void configurePlayer(IjkMediaPlayer player, PlaybackOptions options) {
+        boolean hardwareCodec = options != null && options.useHardwareDecoder();
+        int maxBufferSize = options == null ? 4 * 1024 * 1024 : Math.max(4, options.networkCachingMs / 1000) * 1024 * 1024;
+        int maxCachedDuration = options == null ? 30000 : Math.max(15000, options.networkCachingMs * 5);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", hardwareCodec ? 1 : 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", hardwareCodec ? 1 : 5);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", options != null && options.allowFrameDrop ? 1 : 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 4 * 1024 * 1024);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", maxBufferSize);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 2);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 30000);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", maxCachedDuration);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
