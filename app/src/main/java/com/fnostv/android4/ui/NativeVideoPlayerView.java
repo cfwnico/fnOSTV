@@ -39,8 +39,8 @@ public final class NativeVideoPlayerView {
     private static final int CONTROL_HIDE_DELAY_MS = 5000;
     private static final int PROGRESS_INTERVAL_MS = 1000;
     private static final int PREPARE_TIMEOUT_MS = 20000;
-    private static final int MODE_FILL = 0;
-    private static final int MODE_FIT = 1;
+    private static final int MODE_FIT = 0;
+    private static final int MODE_FILL = 1;
     private static final float[] SPEEDS = new float[]{1.0f, 1.25f, 1.5f, 2.0f, 0.75f};
 
     private final Context context;
@@ -74,7 +74,7 @@ public final class NativeVideoPlayerView {
     private int speedIndex;
     private int sourceIndex;
     private int pendingSeekMs = -1;
-    private int pictureMode = MODE_FILL;
+    private int pictureMode = MODE_FIT;
     private int videoWidth;
     private int videoHeight;
 
@@ -120,7 +120,7 @@ public final class NativeVideoPlayerView {
                 surfaceHolder = holder;
                 surfaceReady = true;
                 if (currentPlayer != null) {
-                    currentPlayer.attachSurface(holder);
+                    currentPlayer.attachSurface(holder, videoView.getWidth(), videoView.getHeight());
                 } else if (currentUrl.length() > 0 && view.getVisibility() == View.VISIBLE) {
                     startPlayer();
                 }
@@ -129,6 +129,9 @@ public final class NativeVideoPlayerView {
             @Override
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
                 surfaceHolder = holder;
+                if (currentPlayer != null) {
+                    currentPlayer.resizeSurface(width, height);
+                }
             }
 
             @Override
@@ -359,7 +362,7 @@ public final class NativeVideoPlayerView {
         try {
             final PlayerEngine player = createPlayerEngine();
             currentPlayer = player;
-            player.attachSurface(surfaceHolder);
+            player.attachSurface(surfaceHolder, videoView.getWidth(), videoView.getHeight());
             player.setListener(new PlayerEngine.Listener() {
                 @Override
                 public void onPrepared(int width, int height, int durationMs) {

@@ -24,10 +24,14 @@ public final class IjkPlayerEngine implements PlayerEngine {
     }
 
     @Override
-    public void attachSurface(SurfaceHolder holder) {
+    public void attachSurface(SurfaceHolder holder, int width, int height) {
         if (player != null) {
             player.setDisplay(holder);
         }
+    }
+
+    @Override
+    public void resizeSurface(int width, int height) {
     }
 
     @Override

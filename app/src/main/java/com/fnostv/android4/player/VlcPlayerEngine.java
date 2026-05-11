@@ -17,6 +17,8 @@ public final class VlcPlayerEngine implements PlayerEngine {
     private MediaPlayer player;
     private Listener listener;
     private SurfaceHolder surfaceHolder;
+    private int surfaceWidth;
+    private int surfaceHeight;
     private boolean prepared;
 
     public VlcPlayerEngine(Context context) {
@@ -34,13 +36,31 @@ public final class VlcPlayerEngine implements PlayerEngine {
     }
 
     @Override
-    public void attachSurface(SurfaceHolder holder) {
+    public void attachSurface(SurfaceHolder holder, int width, int height) {
         surfaceHolder = holder;
+        surfaceWidth = Math.max(0, width);
+        surfaceHeight = Math.max(0, height);
         if (player != null && holder != null) {
             IVLCVout out = player.getVLCVout();
             out.detachViews();
+            if (surfaceWidth > 0 && surfaceHeight > 0) {
+                out.setWindowSize(surfaceWidth, surfaceHeight);
+            }
             out.setVideoSurface(holder.getSurface(), holder);
             out.attachViews();
+            player.setAspectRatio(null);
+            player.setScale(0);
+        }
+    }
+
+    @Override
+    public void resizeSurface(int width, int height) {
+        surfaceWidth = Math.max(0, width);
+        surfaceHeight = Math.max(0, height);
+        if (player != null && surfaceWidth > 0 && surfaceHeight > 0) {
+            player.getVLCVout().setWindowSize(surfaceWidth, surfaceHeight);
+            player.setAspectRatio(null);
+            player.setScale(0);
         }
     }
 
@@ -68,7 +88,7 @@ public final class VlcPlayerEngine implements PlayerEngine {
             }
         });
         if (surfaceHolder != null) {
-            attachSurface(surfaceHolder);
+            attachSurface(surfaceHolder, surfaceWidth, surfaceHeight);
         }
         Media media = new Media(libVlc, Uri.parse(url));
         media.setHWDecoderEnabled(hardwareCodec, false);

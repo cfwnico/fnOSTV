@@ -23,7 +23,9 @@ public interface PlayerEngine {
 
     void setListener(Listener listener);
 
-    void attachSurface(SurfaceHolder holder);
+    void attachSurface(SurfaceHolder holder, int width, int height);
+
+    void resizeSurface(int width, int height);
 
     void detachSurface();
 
