@@ -52,24 +52,30 @@ public final class SettingsForm {
         LinearLayout panel = new LinearLayout(context);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.CENTER_HORIZONTAL);
-        panel.setPadding(dp(40), dp(34), dp(40), dp(34));
-        panel.setBackgroundDrawable(FnosTheme.stroked(FnosTheme.COLOR_PANEL, 0xFF394353, 16, context));
+        panel.setPadding(dp(48), dp(42), dp(48), dp(38));
+        panel.setBackgroundDrawable(FnosTheme.stroked(FnosTheme.COLOR_PANEL, 0xFF394353, 24, context));
         FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(dp(448), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
         root.addView(panel, panelParams);
 
+        LinearLayout brand = new LinearLayout(context);
+        brand.setGravity(Gravity.CENTER);
+        brand.setOrientation(LinearLayout.HORIZONTAL);
+        brand.addView(new FnosLogoMarkView(context), new LinearLayout.LayoutParams(dp(54), dp(54)));
         TextView logo = new TextView(context);
         logo.setText("fnOSTV");
         logo.setTextColor(FnosTheme.COLOR_TEXT);
         logo.setTextSize(30);
-        logo.setGravity(Gravity.CENTER);
-        panel.addView(logo, rowParams(0, 4));
+        logo.setGravity(Gravity.CENTER_VERTICAL);
+        logo.setPadding(dp(12), 0, 0, 0);
+        brand.addView(logo, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(54)));
+        panel.addView(brand, rowParams(0, 10));
 
         TextView subtitle = new TextView(context);
         subtitle.setText("原生轻量影视客户端");
         subtitle.setTextColor(FnosTheme.COLOR_TEXT_MUTED);
         subtitle.setTextSize(15);
         subtitle.setGravity(Gravity.CENTER);
-        panel.addView(subtitle, rowParams(0, 24));
+        panel.addView(subtitle, rowParams(0, 28));
 
         if (errorMessage != null && errorMessage.length() > 0) {
             TextView error = new TextView(context);
@@ -100,7 +106,7 @@ public final class SettingsForm {
         options.addView(autoLoginInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         trustSslInput = checkbox("信任 SSL 异常", profile.trustSslErrors);
         options.addView(trustSslInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        panel.addView(options, rowParams(0, 18));
+        panel.addView(options, rowParams(0, 20));
 
         Button login = button("登录", true);
         login.setOnClickListener(new View.OnClickListener() {
@@ -110,6 +116,10 @@ public final class SettingsForm {
             }
         });
         panel.addView(login, rowParams(0, 12));
+
+        Button nas = button("使用 NAS 登录", false);
+        nas.setEnabled(false);
+        panel.addView(nas, rowParams(0, 10));
 
         Button cancel = button("取消", false);
         cancel.setOnClickListener(new View.OnClickListener() {
@@ -148,7 +158,8 @@ public final class SettingsForm {
         input.setTextSize(16);
         input.setSelectAllOnFocus(true);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackgroundDrawable(FnosTheme.stroked(0xFF20252E, 0xFF454E5D, 6, context));
+        input.setMinHeight(dp(48));
+        input.setBackgroundDrawable(FnosTheme.stroked(0xFF20252E, 0xFF454E5D, 10, context));
         if (password) {
             input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         } else {
@@ -173,8 +184,8 @@ public final class SettingsForm {
         button.setTextColor(FnosTheme.COLOR_TEXT);
         button.setAllCaps(false);
         button.setMinHeight(dp(54));
-        button.setBackgroundDrawable(FnosTheme.rounded(primary ? FnosTheme.COLOR_PRIMARY : FnosTheme.COLOR_CARD, 8, context));
-        FocusStyler.apply(button, primary ? FnosTheme.COLOR_PRIMARY : FnosTheme.COLOR_CARD, 0xFF4EA1FF, 8);
+        button.setBackgroundDrawable(FnosTheme.rounded(primary ? FnosTheme.COLOR_PRIMARY : FnosTheme.COLOR_CARD, 10, context));
+        FocusStyler.apply(button, primary ? FnosTheme.COLOR_PRIMARY : FnosTheme.COLOR_CARD, 0xFF4EA1FF, 10);
         return button;
     }
 

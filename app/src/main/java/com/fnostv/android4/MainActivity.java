@@ -627,7 +627,8 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 known.size(),
                 filterCategory(known, NativeHomeView.ACTION_MOVIES).size(),
                 filterCategory(known, NativeHomeView.ACTION_TV).size(),
-                filterCategory(known, NativeHomeView.ACTION_OTHER).size());
+                filterCategory(known, NativeHomeView.ACTION_OTHER).size(),
+                recentPlaybackStore.list().size());
     }
 
     private List<FnosFileEntry> knownMediaEntries() {

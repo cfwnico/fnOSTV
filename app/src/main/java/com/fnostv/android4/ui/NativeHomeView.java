@@ -39,6 +39,7 @@ public final class NativeHomeView {
     private TextView otherCountView;
     private TextView heroCard;
     private TextView recentCard;
+    private TextView favoriteCard;
 
     public NativeHomeView(Context context, Listener listener) {
         this.context = context;
@@ -80,7 +81,7 @@ public final class NativeHomeView {
         }
     }
 
-    public void updateCounts(int favoriteCount, int libraryCount, int allCount, int movieCount, int tvCount, int otherCount) {
+    public void updateCounts(int favoriteCount, int libraryCount, int allCount, int movieCount, int tvCount, int otherCount, int recentCount) {
         setCount(favoriteCountView, favoriteCount);
         setCount(libraryCountView, libraryCount);
         setCount(allCountView, allCount);
@@ -91,7 +92,10 @@ public final class NativeHomeView {
             heroCard.setText("影视大全\n" + libraryCount + " 个媒体库");
         }
         if (recentCard != null) {
-            recentCard.setText(allCount == 0 ? "继续观看\n暂无最近播放" : "继续观看\n" + allCount + " 个项目");
+            recentCard.setText(recentCount == 0 ? "继续观看\n暂无最近播放" : "继续观看\n" + recentCount + " 个项目");
+        }
+        if (favoriteCard != null) {
+            favoriteCard.setText(favoriteCount == 0 ? "收藏\n快速访问" : "收藏\n" + favoriteCount + " 个项目");
         }
     }
 
@@ -101,12 +105,18 @@ public final class NativeHomeView {
         sidebar.setPadding(dp(18), dp(26), dp(18), dp(20));
         sidebar.setBackgroundColor(FnosTheme.COLOR_SIDEBAR);
 
+        LinearLayout brand = new LinearLayout(context);
+        brand.setOrientation(LinearLayout.HORIZONTAL);
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+        brand.addView(new FnosLogoMarkView(context), new LinearLayout.LayoutParams(dp(36), dp(36)));
         TextView logo = new TextView(context);
         logo.setText("fnOSTV");
         logo.setTextColor(FnosTheme.COLOR_TEXT);
-        logo.setTextSize(20);
+        logo.setTextSize(18);
         logo.setGravity(Gravity.CENTER_VERTICAL);
-        sidebar.addView(logo, navParams(0, 28));
+        logo.setPadding(dp(8), 0, 0, 0);
+        brand.addView(logo, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)));
+        sidebar.addView(brand, navParams(0, 28));
 
         firstNav = navItem(FnosSidebarIconView.TYPE_HOME, "首页", ACTION_HOME, null);
         sidebar.addView(firstNav, navParams(0, 8));
@@ -132,7 +142,7 @@ public final class NativeHomeView {
     private LinearLayout content() {
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(42), dp(22), dp(34), dp(30));
+        content.setPadding(dp(42), dp(24), dp(34), dp(30));
         content.setBackgroundColor(FnosTheme.COLOR_APP_BG);
 
         LinearLayout top = new LinearLayout(context);
@@ -141,23 +151,23 @@ public final class NativeHomeView {
         TextView title = new TextView(context);
         title.setText("首页");
         title.setTextColor(FnosTheme.COLOR_TEXT);
-        title.setTextSize(21);
+        title.setTextSize(22);
         top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         top.addView(iconButton(FnosActionIconButton.TYPE_SEARCH, ACTION_SEARCH), iconParams());
         top.addView(iconButton(FnosActionIconButton.TYPE_USER, ACTION_USER), iconParams());
         top.addView(iconButton(FnosActionIconButton.TYPE_SETTINGS, ACTION_SETTINGS), iconParams());
-        content.addView(top, rowParams(0, 28));
+        content.addView(top, rowParams(0, 30));
 
         content.addView(sectionTitle("媒体库"), rowParams(0, 12));
-        heroCard = mediaCard("影视大全\n1 个媒体库", ACTION_MEDIA, dp(242), dp(136));
+        heroCard = mediaCard("影视大全\n1 个媒体库", ACTION_MEDIA, dp(390), dp(76), true);
         content.addView(heroCard, rowParams(0, 28));
 
         content.addView(sectionLink("影视大全  ›", ACTION_MEDIA), rowParams(0, 12));
         LinearLayout cards = new LinearLayout(context);
         cards.setOrientation(LinearLayout.HORIZONTAL);
-        recentCard = mediaCard("继续观看\n暂无最近播放", ACTION_RECENT, dp(160), dp(235));
+        recentCard = mediaCard("继续观看\n暂无最近播放", ACTION_RECENT, dp(160), dp(235), false);
         cards.addView(recentCard, new LinearLayout.LayoutParams(dp(160), dp(235)));
-        TextView favoriteCard = mediaCard("收藏\n快速访问", ACTION_FAVORITES, dp(160), dp(235));
+        favoriteCard = mediaCard("收藏\n快速访问", ACTION_FAVORITES, dp(160), dp(235), false);
         LinearLayout.LayoutParams favoriteParams = new LinearLayout.LayoutParams(dp(160), dp(235));
         favoriteParams.leftMargin = dp(16);
         cards.addView(favoriteCard, favoriteParams);
@@ -232,13 +242,15 @@ public final class NativeHomeView {
         return view;
     }
 
-    private TextView mediaCard(String text, final String action, int width, int height) {
+    private TextView mediaCard(String text, final String action, int width, int height, boolean wide) {
         TextView card = new TextView(context);
         card.setText(text);
         card.setTextColor(Color.WHITE);
-        card.setTextSize(16);
-        card.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        card.setPadding(dp(12), dp(12), dp(12), dp(14));
+        card.setTextSize(wide ? 16 : 15);
+        card.setGravity(wide ? Gravity.CENTER : (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+        card.setPadding(dp(14), dp(12), dp(14), dp(14));
+        card.setMinWidth(width);
+        card.setMinHeight(height);
         FocusStyler.applyCard(card);
         card.setOnClickListener(new View.OnClickListener() {
             @Override
