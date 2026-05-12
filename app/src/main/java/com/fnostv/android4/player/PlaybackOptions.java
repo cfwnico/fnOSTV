@@ -21,9 +21,17 @@ public final class PlaybackOptions {
     public final boolean allowFrameDrop;
     public final boolean fastDecode;
     public final int loopFilterSkip;
+    public final int probeSizeKb;
+    public final int analyzeDurationMs;
 
     PlaybackOptions(int decoderMode, int cacheMode, int profileMode, int networkCachingMs, int fileCachingMs,
             boolean allowFrameDrop, boolean fastDecode, int loopFilterSkip) {
+        this(decoderMode, cacheMode, profileMode, networkCachingMs, fileCachingMs,
+                allowFrameDrop, fastDecode, loopFilterSkip, 512, 1000);
+    }
+
+    PlaybackOptions(int decoderMode, int cacheMode, int profileMode, int networkCachingMs, int fileCachingMs,
+            boolean allowFrameDrop, boolean fastDecode, int loopFilterSkip, int probeSizeKb, int analyzeDurationMs) {
         this.decoderMode = decoderMode;
         this.cacheMode = cacheMode;
         this.profileMode = profileMode;
@@ -32,6 +40,8 @@ public final class PlaybackOptions {
         this.allowFrameDrop = allowFrameDrop;
         this.fastDecode = fastDecode;
         this.loopFilterSkip = loopFilterSkip;
+        this.probeSizeKb = probeSizeKb;
+        this.analyzeDurationMs = analyzeDurationMs;
     }
 
     public static PlaybackOptions forUrl(String url, boolean preferHardwareCodec) {
@@ -45,13 +55,14 @@ public final class PlaybackOptions {
 
     public PlaybackOptions withSoftwareDecoder() {
         return new PlaybackOptions(DECODER_SOFTWARE, cacheMode, profileMode, networkCachingMs, fileCachingMs,
-                allowFrameDrop, fastDecode, loopFilterSkip);
+                allowFrameDrop, fastDecode, loopFilterSkip, probeSizeKb, analyzeDurationMs);
     }
 
     public PlaybackOptions withFluentFallback() {
         int network = Math.max(networkCachingMs, cacheMode == CACHE_REMOTE ? 6000 : 4000);
         int file = Math.max(fileCachingMs, 2500);
-        return new PlaybackOptions(decoderMode, cacheMode, PROFILE_FLUENT, network, file, true, true, 4);
+        return new PlaybackOptions(decoderMode, cacheMode, PROFILE_FLUENT, network, file, true, true, 4,
+                Math.max(probeSizeKb, 1024), Math.max(analyzeDurationMs, 1500));
     }
 
     public boolean useHardwareDecoder() {
@@ -96,7 +107,9 @@ public final class PlaybackOptions {
                 + " file=" + fileCachingMs
                 + " framedrop=" + allowFrameDrop
                 + " fast=" + fastDecode
-                + " skiploop=" + loopFilterSkip;
+                + " skiploop=" + loopFilterSkip
+                + " probeKb=" + probeSizeKb
+                + " analyzeMs=" + analyzeDurationMs;
     }
 
     private static boolean isRemoteUrl(String url) {

@@ -41,8 +41,8 @@ public final class NativeVideoPlayerView {
     private static final int CONTROL_HIDE_DELAY_MS = 5000;
     private static final int PROGRESS_INTERVAL_MS = 1000;
     private static final int PREPARE_TIMEOUT_MS = 20000;
-    private static final int SEEK_COMMIT_DELAY_MS = 180;
-    private static final int SEEK_SETTLE_DELAY_MS = 900;
+    private static final int SEEK_COMMIT_DELAY_MS = 260;
+    private static final int SEEK_SETTLE_DELAY_MS = 1200;
     private static final int MODE_FIT = 0;
     private static final int MODE_FILL = 1;
     private static final float[] SPEEDS = new float[]{1.0f, 1.25f, 1.5f, 2.0f, 0.75f};
@@ -81,7 +81,7 @@ public final class NativeVideoPlayerView {
     private int sourceIndex;
     private int pendingSeekMs = -1;
     private int pendingSeekRequestMs = -1;
-    private int pictureMode = MODE_FILL;
+    private int pictureMode = MODE_FIT;
     private int videoWidth;
     private int videoHeight;
 
@@ -426,6 +426,10 @@ public final class NativeVideoPlayerView {
                     videoWidth = width;
                     videoHeight = height;
                     videoView.setVideoSize(videoWidth, videoHeight);
+                    Logger.d(player.name() + " video size changed file=" + fileName()
+                            + " size=" + videoWidth + "x" + videoHeight
+                            + " surface=" + videoView.getWidth() + "x" + videoView.getHeight()
+                            + " picture=" + pictureModeLabel());
                     updateControlText();
                 }
                 @Override
@@ -437,7 +441,7 @@ public final class NativeVideoPlayerView {
                             + " source=" + currentSource().label
                             + " pos=" + position()
                             + " extra=" + extra);
-                    if (bufferingCount == 3 && prepared && playbackOptions != null
+                    if (bufferingCount == 3 && prepared && !seeking && pendingSeekRequestMs < 0 && playbackOptions != null
                             && playbackOptions.profileMode != PlaybackOptions.PROFILE_FLUENT) {
                         retryWithFluentPlayback("缓冲频繁，切换流畅模式");
                     }
@@ -642,6 +646,10 @@ public final class NativeVideoPlayerView {
         pendingSeekRequestMs = Math.max(0, targetMs);
         seeking = true;
         loadingView.setVisibility(View.VISIBLE);
+        Logger.d(engineName() + " seek requested file=" + fileName()
+                + " from=" + position()
+                + " target=" + pendingSeekRequestMs
+                + " duration=" + duration());
         int duration = duration();
         if (duration > 0) {
             seekBar.setProgress(toSeekBarProgress(pendingSeekRequestMs, duration));
@@ -660,6 +668,9 @@ public final class NativeVideoPlayerView {
         pendingSeekRequestMs = -1;
         try {
             if (currentPlayer != null) {
+                Logger.d(engineName() + " seek commit file=" + fileName()
+                        + " target=" + targetMs
+                        + " options=" + optionsLabel());
                 currentPlayer.seekTo(targetMs);
             }
             pendingSeekMs = targetMs;
@@ -699,6 +710,7 @@ public final class NativeVideoPlayerView {
         videoView.setResizeMode(pictureMode);
         if (currentPlayer != null) {
             currentPlayer.setFillMode(pictureMode == MODE_FILL);
+            currentPlayer.resizeSurface(videoView.getWidth(), videoView.getHeight());
         }
         updateControlText();
         showHint(pictureMode == MODE_FILL ? "画面铺满" : "画面适应");
@@ -809,6 +821,10 @@ public final class NativeVideoPlayerView {
             return String.format(Locale.US, "%.1fx", speed);
         }
         return String.format(Locale.US, "%.2fx", speed);
+    }
+
+    private String pictureModeLabel() {
+        return pictureMode == MODE_FILL ? "fill" : "fit";
     }
 
     private void showControls() {

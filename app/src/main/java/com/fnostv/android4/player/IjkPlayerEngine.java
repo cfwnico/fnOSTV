@@ -184,12 +184,15 @@ public final class IjkPlayerEngine implements PlayerEngine {
 
     private void configurePlayer(IjkMediaPlayer player, PlaybackOptions options) {
         boolean hardwareCodec = options != null && options.useHardwareDecoder();
-        int maxBufferSize = options == null ? 4 * 1024 * 1024 : Math.max(4, options.networkCachingMs / 1000) * 1024 * 1024;
-        int maxCachedDuration = options == null ? 30000 : Math.max(15000, options.networkCachingMs * 5);
+        int maxBufferSize = options == null ? 8 * 1024 * 1024 : Math.max(8, options.networkCachingMs / 750) * 1024 * 1024;
+        int maxCachedDuration = options == null ? 30000 : Math.max(20000, options.networkCachingMs * 6);
+        int probeSize = options == null ? 512 * 1024 : Math.max(256, options.probeSizeKb) * 1024;
+        long analyzeDurationUs = options == null ? 1000000L : Math.max(500L, options.analyzeDurationMs) * 1000L;
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", hardwareCodec ? 1 : 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", options != null && options.allowFrameDrop ? 1 : 0);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-fps", 60);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", maxBufferSize);
@@ -198,8 +201,9 @@ public final class IjkPlayerEngine implements PlayerEngine {
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 0);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzemaxduration", 100L);
-        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32 * 1024L);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzemaxduration", analyzeDurationUs);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", analyzeDurationUs);
+        player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", probeSize);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1);
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "fastseek");
         player.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter",

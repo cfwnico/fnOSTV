@@ -83,6 +83,10 @@ public final class VlcPlayerEngine implements PlayerEngine {
         ArrayList<String> vlcOptions = new ArrayList<String>();
         vlcOptions.add("--network-caching=" + playback.networkCachingMs);
         vlcOptions.add("--file-caching=" + playback.fileCachingMs);
+        vlcOptions.add("--live-caching=" + Math.max(1500, playback.networkCachingMs / 2));
+        vlcOptions.add("--clock-jitter=0");
+        vlcOptions.add("--clock-synchro=0");
+        vlcOptions.add("--http-reconnect");
         if (playback.allowFrameDrop) {
             vlcOptions.add("--drop-late-frames");
             vlcOptions.add("--skip-frames");
@@ -111,6 +115,16 @@ public final class VlcPlayerEngine implements PlayerEngine {
         media.setHWDecoderEnabled(playback.useHardwareDecoder(), false);
         media.addOption(":network-caching=" + playback.networkCachingMs);
         media.addOption(":file-caching=" + playback.fileCachingMs);
+        media.addOption(":live-caching=" + Math.max(1500, playback.networkCachingMs / 2));
+        media.addOption(":clock-jitter=0");
+        media.addOption(":clock-synchro=0");
+        if (playback.allowFrameDrop) {
+            media.addOption(":drop-late-frames");
+            media.addOption(":skip-frames");
+        } else {
+            media.addOption(":no-drop-late-frames");
+            media.addOption(":no-skip-frames");
+        }
         if (playback.fastDecode) {
             media.addOption(":avcodec-fast");
         }

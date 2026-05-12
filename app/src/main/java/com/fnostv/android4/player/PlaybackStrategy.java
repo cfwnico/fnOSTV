@@ -10,14 +10,20 @@ public final class PlaybackStrategy {
         if (isLegacyFormat(format)) {
             decoder = PlaybackOptions.DECODER_SOFTWARE;
         }
+        boolean highRisk = isHighRiskFormat(format, fileName, size);
+        if (highRisk) {
+            decoder = PlaybackOptions.DECODER_SOFTWARE;
+        }
         int cache = isRemoteUrl(url) ? PlaybackOptions.CACHE_REMOTE : PlaybackOptions.CACHE_STABLE;
         int networkMs = cache == PlaybackOptions.CACHE_REMOTE ? 6000 : 3000;
         int fileMs = cache == PlaybackOptions.CACHE_REMOTE ? 3000 : 2000;
         boolean fluent = shouldPreferFluent(format, fileName, size);
         if (fluent) {
-            networkMs = Math.max(networkMs, cache == PlaybackOptions.CACHE_REMOTE ? 7000 : 4500);
+            networkMs = Math.max(networkMs, cache == PlaybackOptions.CACHE_REMOTE ? 8000 : 5000);
             fileMs = Math.max(fileMs, 2500);
         }
+        int probeSizeKb = fluent ? 2048 : 768;
+        int analyzeDurationMs = fluent ? 2500 : 1200;
         return new PlaybackOptions(
                 decoder,
                 cache,
@@ -26,7 +32,9 @@ public final class PlaybackStrategy {
                 fileMs,
                 fluent,
                 fluent,
-                fluent ? 4 : 0);
+                fluent ? 4 : 0,
+                probeSizeKb,
+                analyzeDurationMs);
     }
 
     public static PlaybackOptions onFrequentBuffering(PlaybackOptions current) {
@@ -43,10 +51,16 @@ public final class PlaybackStrategy {
                 fileMs,
                 true,
                 true,
-                Math.max(4, current.loopFilterSkip));
+                Math.max(4, current.loopFilterSkip),
+                Math.max(2048, current.probeSizeKb),
+                Math.max(2500, current.analyzeDurationMs));
     }
 
     private static boolean shouldPreferFluent(String format, String fileName, long size) {
+        return isHighRiskFormat(format, fileName, size);
+    }
+
+    private static boolean isHighRiskFormat(String format, String fileName, long size) {
         String lowerName = lower(fileName);
         return format.equals("mkv")
                 || format.equals("m2ts")
