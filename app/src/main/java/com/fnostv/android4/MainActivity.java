@@ -27,6 +27,9 @@ import android.widget.Toast;
 
 import com.fnostv.android4.config.ProfileStore;
 import com.fnostv.android4.config.ServerProfile;
+import com.fnostv.android4.media.MediaIndexStore;
+import com.fnostv.android4.media.MediaLibraryClassifier;
+import com.fnostv.android4.media.MediaLibraryStore;
 import com.fnostv.android4.net.FavoriteStore;
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosFileList;
@@ -75,6 +78,8 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private FnosSessionStore sessionStore;
     private RecentPlaybackStore recentPlaybackStore;
     private FavoriteStore favoriteStore;
+    private MediaLibraryStore mediaLibraryStore;
+    private MediaIndexStore mediaIndexStore;
     private ServerProfile profile;
     private boolean settingsOpen;
     private boolean nativeAuthRunning;
@@ -107,6 +112,8 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         sessionStore = new FnosSessionStore(this);
         recentPlaybackStore = new RecentPlaybackStore(this);
         favoriteStore = new FavoriteStore(this);
+        mediaLibraryStore = new MediaLibraryStore(this);
+        mediaIndexStore = new MediaIndexStore(this);
         CookieSyncManager.createInstance(this);
         buildLayout();
         remoteKeyHandler = new RemoteKeyHandler(this);
@@ -552,9 +559,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        if (result.success) {
-                            statusOverlay.hide();
-                            fileBrowserView.showCustom(result.title, result.subtitle, result.list.entries, result.sortEntries);
+        if (result.success) {
+            statusOverlay.hide();
+            fileBrowserView.showCustom(result.title, result.subtitle, result.list.entries, result.sortEntries);
                         } else {
                             showStatus(result.message);
                             nativeHomeView.show();
@@ -567,6 +574,10 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private MediaLoadResult loadMediaCenter(String path) {
         if (path == null || path.length() == 0) {
+            List<FnosFileEntry> indexed = mediaIndexStore.list();
+            if (indexed.size() > 0) {
+                return MediaLoadResult.success("影视大全", "本地媒体库索引", new FnosFileList("mediaIndex", indexed), true);
+            }
             try {
                 FnosSession session = sessionStore.load();
                 if (session.hasToken()) {
@@ -608,10 +619,11 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     private void updateHomeCounts() {
+        int libraryCount = mediaLibraryStore.listOrSeedDefault().size();
         List<FnosFileEntry> known = knownMediaEntries();
         nativeHomeView.updateCounts(
                 favoriteStore.list().size(),
-                1,
+                libraryCount,
                 known.size(),
                 filterCategory(known, NativeHomeView.ACTION_MOVIES).size(),
                 filterCategory(known, NativeHomeView.ACTION_TV).size(),
@@ -620,6 +632,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private List<FnosFileEntry> knownMediaEntries() {
         List<FnosFileEntry> values = new ArrayList<FnosFileEntry>();
+        appendUnique(values, mediaIndexStore.list());
         appendUnique(values, recentPlaybackStore.list());
         appendUnique(values, favoriteStore.list());
         return values;
@@ -679,27 +692,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         if (entry == null || !entry.isVideo()) {
             return false;
         }
-        String name = entry.name.toLowerCase();
-        return !isTv(entry) && (name.endsWith(".mp4")
-                || name.endsWith(".mkv")
-                || name.endsWith(".avi")
-                || name.endsWith(".mov")
-                || name.endsWith(".wmv")
-                || name.endsWith(".rmvb"));
+        return MediaLibraryClassifier.inferCategory(entry.name, entry.path).equals("movie");
     }
 
     private boolean isTv(FnosFileEntry entry) {
         if (entry == null) {
             return false;
         }
-        String name = entry.name.toLowerCase();
-        String path = entry.path.toLowerCase();
-        return name.indexOf("s01") >= 0
-                || name.indexOf("e01") >= 0
-                || name.indexOf("第") >= 0
-                || path.indexOf("tv") >= 0
-                || path.indexOf("series") >= 0
-                || path.indexOf("电视剧") >= 0;
+        return MediaLibraryClassifier.inferCategory(entry.name, entry.path).equals("tv");
     }
 
     private String parentPath(String path) {
