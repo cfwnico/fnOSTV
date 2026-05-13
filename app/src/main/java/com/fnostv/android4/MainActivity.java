@@ -33,7 +33,9 @@ import com.fnostv.android4.media.MediaLibraryStore;
 import com.fnostv.android4.net.FavoriteStore;
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosFileList;
+import com.fnostv.android4.net.FnosMediaCounts;
 import com.fnostv.android4.net.FnosPlaybackSource;
+import com.fnostv.android4.net.FnosRestClient;
 import com.fnostv.android4.net.FnosRpcClient;
 import com.fnostv.android4.net.FnosRpcException;
 import com.fnostv.android4.net.FnosSession;
@@ -209,6 +211,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private void loadProfileOrSettings() {
         profile = store.load();
+        fileBrowserView.setPosterBaseUrl(profile.baseUrl);
         nativeHomeView.hide();
         fileBrowserView.hide();
         nativeVideoPlayerView.hide();
@@ -360,11 +363,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             openMediaCenter("");
             return;
         }
-        if (NativeHomeView.ACTION_MEDIA.equals(action)) {
-            showStatus("影视中心接口正在反查");
-            return;
-        }
-        showStatus("最近播放正在接入");
+        showStatus("暂不支持该入口：" + action);
     }
 
     @Override
@@ -393,6 +392,11 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     @Override
     public boolean isFileFavorite(FnosFileEntry entry) {
         return favoriteStore.isFavorite(entry);
+    }
+
+    @Override
+    public void onBrowserAction(String action) {
+        onHomeAction(action);
     }
 
     @Override
@@ -491,9 +495,20 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         currentFilePath = "";
         nativeHomeView.hide();
         webView.setVisibility(View.GONE);
-        statusOverlay.hide();
-        List<FnosFileEntry> entries = recentPlaybackStore.list();
-        fileBrowserView.showCustom("最近播放", entries.size() == 0 ? "暂无播放记录" : "本机播放记录", entries, false);
+        showStatus("正在加载继续观看...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final MediaLoadResult result = loadRecentPlayback();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        statusOverlay.hide();
+                        fileBrowserView.showCustom(result.title, result.subtitle, result.list.entries, result.sortEntries);
+                    }
+                });
+            }
+        }, "fnos-rest-recent").start();
     }
 
     private void openFavorites() {
@@ -501,19 +516,41 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         currentFilePath = "";
         nativeHomeView.hide();
         webView.setVisibility(View.GONE);
-        statusOverlay.hide();
-        List<FnosFileEntry> entries = favoriteStore.list();
-        fileBrowserView.showCustom("收藏", entries.size() == 0 ? "暂无收藏，文件列表中按右键可收藏" : "本机收藏", entries, false);
+        showStatus("正在加载收藏...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final MediaLoadResult result = loadFavorites();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        statusOverlay.hide();
+                        fileBrowserView.showCustom(result.title, result.subtitle, result.list.entries, result.sortEntries);
+                    }
+                });
+            }
+        }, "fnos-rest-favorites").start();
     }
 
-    private void openCategory(String title, String category) {
+    private void openCategory(final String title, final String category) {
         browserMode = BROWSER_MODE_CATEGORY;
         currentFilePath = "";
         nativeHomeView.hide();
         webView.setVisibility(View.GONE);
-        statusOverlay.hide();
-        List<FnosFileEntry> entries = filterCategory(knownMediaEntries(), category);
-        fileBrowserView.showCustom(title, entries.size() == 0 ? "暂无内容，先从影视大全或文件库播放/收藏媒体" : "来自最近播放和收藏", entries, false);
+        showStatus("正在加载" + title + "...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final MediaLoadResult result = loadCategory(title, category);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        statusOverlay.hide();
+                        fileBrowserView.showCustom(result.title, result.subtitle, result.list.entries, result.sortEntries);
+                    }
+                });
+            }
+        }, "fnos-rest-category").start();
     }
 
     private void openSearchDialog() {
@@ -574,6 +611,23 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private MediaLoadResult loadMediaCenter(String path) {
         if (path == null || path.length() == 0) {
+            try {
+                FnosRestClient client = newRestClient();
+                FnosFileList libraries = client.mediaLibraries();
+                if (libraries.entries.size() > 0) {
+                    FnosFileEntry first = libraries.entries.get(0);
+                    FnosFileList list = client.mediaItems(first.path, NativeHomeView.ACTION_ALL, 50);
+                    return MediaLoadResult.success(first.name.length() == 0 ? "影视大全" : first.name, "fnOS 影视媒体库", list, false);
+                }
+                FnosFileList list = client.mediaItems("", NativeHomeView.ACTION_ALL, 50);
+                if (list.entries.size() > 0) {
+                    return MediaLoadResult.success("影视大全", "fnOS 影视条目", list, false);
+                }
+            } catch (FnosRpcException ex) {
+                Logger.w("Media center REST API unavailable: " + ex.getMessage());
+            } catch (RuntimeException ex) {
+                Logger.w("Media center REST API crashed: " + ex.getMessage());
+            }
             List<FnosFileEntry> indexed = mediaIndexStore.list();
             if (indexed.size() > 0) {
                 return MediaLoadResult.success("影视大全", "本地媒体库索引", new FnosFileList("mediaIndex", indexed), true);
@@ -592,6 +646,15 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             } catch (RuntimeException ex) {
                 Logger.w("Media center native API crashed: " + ex.getMessage());
             }
+        } else if (isRestMediaPath(path)) {
+            try {
+                FnosFileList list = newRestClient().mediaItems(path, NativeHomeView.ACTION_ALL, 50);
+                return MediaLoadResult.success("影视大全", path, list, false);
+            } catch (FnosRpcException ex) {
+                Logger.w("Media center REST child unavailable: " + ex.getMessage());
+            } catch (RuntimeException ex) {
+                Logger.w("Media center REST child crashed: " + ex.getMessage());
+            }
         }
         FileLoadResult fallback = loadFileList(path);
         if (fallback.success) {
@@ -599,6 +662,45 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return MediaLoadResult.success("影视入口（文件模式）", subtitle, fallback.list, true);
         }
         return MediaLoadResult.failure(fallback.message);
+    }
+
+    private MediaLoadResult loadCategory(String title, String category) {
+        try {
+            FnosFileList list = newRestClient().mediaItems("", category, 50);
+            return MediaLoadResult.success(title, list.entries.size() == 0 ? "暂无内容" : "fnOS 影视服务", list, false);
+        } catch (FnosRpcException ex) {
+            Logger.w("REST category failed: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            Logger.w("REST category crashed: " + ex.getMessage());
+        }
+        List<FnosFileEntry> entries = filterCategory(knownMediaEntries(), category);
+        return MediaLoadResult.success(title, entries.size() == 0 ? "暂无内容，先从影视大全或文件库播放/收藏媒体" : "来自最近播放和收藏", new FnosFileList(category, entries), false);
+    }
+
+    private MediaLoadResult loadFavorites() {
+        try {
+            FnosFileList list = newRestClient().favoriteItems();
+            return MediaLoadResult.success("收藏", list.entries.size() == 0 ? "暂无收藏" : "fnOS 收藏", list, false);
+        } catch (FnosRpcException ex) {
+            Logger.w("REST favorites failed: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            Logger.w("REST favorites crashed: " + ex.getMessage());
+        }
+        List<FnosFileEntry> entries = favoriteStore.list();
+        return MediaLoadResult.success("收藏", entries.size() == 0 ? "暂无收藏，文件列表中按右键可收藏" : "本机收藏", new FnosFileList("favorite", entries), false);
+    }
+
+    private MediaLoadResult loadRecentPlayback() {
+        try {
+            FnosFileList list = newRestClient().recentItems();
+            return MediaLoadResult.success("继续观看", list.entries.size() == 0 ? "暂无播放记录" : "fnOS 继续观看", list, false);
+        } catch (FnosRpcException ex) {
+            Logger.w("REST recent failed: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            Logger.w("REST recent crashed: " + ex.getMessage());
+        }
+        List<FnosFileEntry> entries = recentPlaybackStore.list();
+        return MediaLoadResult.success("最近播放", entries.size() == 0 ? "暂无播放记录" : "本机播放记录", new FnosFileList("recent", entries), false);
     }
 
     private FileLoadResult loadFileList(String path) {
@@ -618,6 +720,20 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         }
     }
 
+    private FnosRestClient newRestClient() throws FnosRpcException {
+        if (profile == null || !profile.isReady()) {
+            throw new FnosRpcException("服务配置不可用");
+        }
+        return new FnosRestClient(profile);
+    }
+
+    private boolean isRestMediaPath(String path) {
+        if (path == null || path.length() == 0) {
+            return false;
+        }
+        return path.indexOf('/') < 0 && path.indexOf('\\') < 0 && path.indexOf(':') < 0;
+    }
+
     private void updateHomeCounts() {
         int libraryCount = mediaLibraryStore.listOrSeedDefault().size();
         List<FnosFileEntry> known = knownMediaEntries();
@@ -629,6 +745,33 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 filterCategory(known, NativeHomeView.ACTION_TV).size(),
                 filterCategory(known, NativeHomeView.ACTION_OTHER).size(),
                 recentPlaybackStore.list().size());
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    FnosRestClient client = newRestClient();
+                    final FnosMediaCounts counts = client.mediaCounts();
+                    final int recentCount = client.recentItems().entries.size();
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            nativeHomeView.updateCounts(
+                                    counts.favoriteCount,
+                                    counts.libraryCount,
+                                    counts.totalCount,
+                                    counts.movieCount,
+                                    counts.tvCount,
+                                    counts.otherCount,
+                                    recentCount);
+                        }
+                    });
+                } catch (FnosRpcException ex) {
+                    Logger.w("REST home counts failed: " + ex.getMessage());
+                } catch (RuntimeException ex) {
+                    Logger.w("REST home counts crashed: " + ex.getMessage());
+                }
+            }
+        }, "fnos-rest-home-counts").start();
     }
 
     private List<FnosFileEntry> knownMediaEntries() {

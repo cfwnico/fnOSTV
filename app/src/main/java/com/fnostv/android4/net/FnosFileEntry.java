@@ -9,14 +9,20 @@ public final class FnosFileEntry {
     public final long size;
     public final String type;
     public final String mediaUrl;
+    public final String posterPath;
 
     public FnosFileEntry(String name, String path, boolean directory, long size, String type, String mediaUrl) {
+        this(name, path, directory, size, type, mediaUrl, "");
+    }
+
+    public FnosFileEntry(String name, String path, boolean directory, long size, String type, String mediaUrl, String posterPath) {
         this.name = name == null ? "" : name;
         this.path = path == null ? "" : path;
         this.directory = directory;
         this.size = size;
         this.type = type == null ? "" : type;
         this.mediaUrl = mediaUrl == null ? "" : mediaUrl;
+        this.posterPath = posterPath == null ? "" : posterPath;
     }
 
     static FnosFileEntry fromJson(JSONObject object, String parentPath, String uid) {
