@@ -6,8 +6,11 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import com.fnostv.android4.net.FnosFileEntry;
 
 public final class NativeHomeView {
     public interface Listener {
@@ -35,6 +38,7 @@ public final class NativeHomeView {
 
     private final Context context;
     private final Listener listener;
+    private final PosterLoader posterLoader = new PosterLoader();
     private FrameLayout view;
     private View firstNav;
     private LinearLayout userMenuView;
@@ -44,9 +48,10 @@ public final class NativeHomeView {
     private TextView movieCountView;
     private TextView tvCountView;
     private TextView otherCountView;
-    private TextView heroCard;
-    private TextView recentCard;
-    private TextView favoriteCard;
+    private HomeMediaCard heroCard;
+    private HomeMediaCard recentCard;
+    private HomeMediaCard favoriteCard;
+    private String posterBaseUrl = "";
     private String username = "--";
     private String sourceName = "--";
     private boolean admin;
@@ -105,13 +110,35 @@ public final class NativeHomeView {
         setCount(tvCountView, tvCount);
         setCount(otherCountView, otherCount);
         if (heroCard != null) {
-            heroCard.setText("影视大全\n" + libraryCount + " 个媒体库");
+            heroCard.setSummary("影视大全\n" + libraryCount + " 个媒体库");
         }
         if (recentCard != null) {
-            recentCard.setText(recentCount == 0 ? "继续观看\n暂无最近播放" : "继续观看\n" + recentCount + " 个项目");
+            recentCard.setSummary(recentCount == 0 ? "继续观看\n暂无最近播放" : "继续观看\n" + recentCount + " 个项目");
         }
         if (favoriteCard != null) {
-            favoriteCard.setText(favoriteCount == 0 ? "收藏\n快速访问" : "收藏\n" + favoriteCount + " 个项目");
+            favoriteCard.setSummary(favoriteCount == 0 ? "收藏\n快速访问" : "收藏\n" + favoriteCount + " 个项目");
+        }
+    }
+
+    public void setPosterBaseUrl(String baseUrl) {
+        posterBaseUrl = baseUrl == null ? "" : baseUrl;
+        refreshPosterCards();
+    }
+
+    public void setPosterAuthorizationToken(String token) {
+        posterLoader.setAuthorizationToken(token);
+        refreshPosterCards();
+    }
+
+    public void updatePosterCards(HomePosterSlots slots) {
+        if (heroCard != null) {
+            heroCard.setEntry(slots == null ? null : slots.media);
+        }
+        if (recentCard != null) {
+            recentCard.setEntry(slots == null ? null : slots.recent);
+        }
+        if (favoriteCard != null) {
+            favoriteCard.setEntry(slots == null ? null : slots.favorite);
         }
     }
 
@@ -189,7 +216,7 @@ public final class NativeHomeView {
 
         content.addView(sectionTitle("媒体库"), rowParams(0, 12));
         heroCard = mediaCard("影视大全\n1 个媒体库", ACTION_MEDIA, dp(390), dp(76), true);
-        content.addView(heroCard, rowParams(0, 28));
+        content.addView(heroCard, rowHeightParams(0, 28, 112));
 
         content.addView(sectionLink("影视大全  ›", ACTION_MEDIA), rowParams(0, 12));
         LinearLayout cards = new LinearLayout(context);
@@ -272,15 +299,10 @@ public final class NativeHomeView {
         return view;
     }
 
-    private TextView mediaCard(String text, final String action, int width, int height, boolean wide) {
-        TextView card = new TextView(context);
-        card.setText(text);
-        card.setTextColor(Color.WHITE);
-        card.setTextSize(wide ? 16 : 15);
-        card.setGravity(wide ? Gravity.CENTER : (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
-        card.setPadding(dp(14), dp(12), dp(14), dp(14));
-        card.setMinWidth(width);
-        card.setMinHeight(height);
+    private HomeMediaCard mediaCard(String text, final String action, int width, int height, boolean wide) {
+        HomeMediaCard card = new HomeMediaCard(context, text, wide);
+        card.setMinimumWidth(width);
+        card.setMinimumHeight(height);
         FocusStyler.applyCard(card);
         card.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -289,6 +311,18 @@ public final class NativeHomeView {
             }
         });
         return card;
+    }
+
+    private void refreshPosterCards() {
+        if (heroCard != null) {
+            heroCard.reloadPoster();
+        }
+        if (recentCard != null) {
+            recentCard.reloadPoster();
+        }
+        if (favoriteCard != null) {
+            favoriteCard.reloadPoster();
+        }
     }
 
     private View iconButton(String iconType, final String action) {
@@ -455,6 +489,15 @@ public final class NativeHomeView {
         return params;
     }
 
+    private LinearLayout.LayoutParams rowHeightParams(int top, int bottom, int height) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(height));
+        params.topMargin = dp(top);
+        params.bottomMargin = dp(bottom);
+        return params;
+    }
+
     private LinearLayout.LayoutParams menuItemParams() {
         return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34));
     }
@@ -484,5 +527,87 @@ public final class NativeHomeView {
     private String emptyToDefault(String value, String fallback) {
         String text = value == null ? "" : value.trim();
         return text.length() == 0 ? fallback : text;
+    }
+
+    private final class HomeMediaCard extends FrameLayout {
+        private final ImageView image;
+        private final TextView fallback;
+        private final TextView caption;
+        private final boolean wide;
+        private String summary;
+        private FnosFileEntry entry;
+
+        HomeMediaCard(Context context, String summary, boolean wide) {
+            super(context);
+            this.summary = summary;
+            this.wide = wide;
+            setPadding(dp(0), dp(0), dp(0), dp(0));
+            setFocusable(true);
+            setClickable(true);
+
+            image = new ImageView(context);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setVisibility(View.GONE);
+            addView(image, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+
+            fallback = new TextView(context);
+            fallback.setTextColor(Color.WHITE);
+            fallback.setTextSize(wide ? 16 : 15);
+            fallback.setGravity(wide ? Gravity.CENTER : (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+            fallback.setPadding(dp(14), dp(12), dp(14), dp(14));
+            addView(fallback, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+
+            caption = new TextView(context);
+            caption.setTextColor(Color.WHITE);
+            caption.setTextSize(wide ? 14 : 15);
+            caption.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            caption.setPadding(dp(12), dp(8), dp(12), dp(12));
+            caption.setBackgroundColor(0x66000000);
+            caption.setVisibility(View.GONE);
+            addView(caption, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    wide ? dp(46) : dp(64),
+                    Gravity.BOTTOM));
+            renderText();
+        }
+
+        void setSummary(String summary) {
+            this.summary = summary == null ? "" : summary;
+            renderText();
+        }
+
+        void setEntry(FnosFileEntry entry) {
+            this.entry = entry;
+            reloadPoster();
+        }
+
+        void reloadPoster() {
+            renderText();
+            posterLoader.load(posterBaseUrl, entry, this, image, fallback, caption);
+        }
+
+        private void renderText() {
+            fallback.setText(fallbackText());
+            caption.setText(captionText());
+            caption.setVisibility(View.GONE);
+        }
+
+        private String fallbackText() {
+            if (entry != null && entry.name.length() > 0) {
+                return entry.posterPath.length() > 0 ? summary : entry.name + "\n" + summary;
+            }
+            return summary;
+        }
+
+        private String captionText() {
+            if (entry != null && entry.name.length() > 0) {
+                return entry.name;
+            }
+            return summary;
+        }
     }
 }

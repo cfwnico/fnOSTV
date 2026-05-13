@@ -92,7 +92,8 @@ public final class FavoriteStore {
                 false,
                 object.optLong("size", 0L),
                 object.optString("type"),
-                object.optString("mediaUrl"));
+                object.optString("mediaUrl"),
+                object.optString("posterPath"));
     }
 
     private JSONObject toJson(FnosFileEntry entry) {
@@ -103,6 +104,7 @@ public final class FavoriteStore {
             object.put("size", entry.size);
             object.put("type", entry.type);
             object.put("mediaUrl", entry.mediaUrl);
+            object.put("posterPath", entry.posterPath);
             object.put("favoritedAt", System.currentTimeMillis());
         } catch (JSONException ignored) {
         }

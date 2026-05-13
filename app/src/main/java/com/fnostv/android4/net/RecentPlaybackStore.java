@@ -39,7 +39,8 @@ public final class RecentPlaybackStore {
                         false,
                         object.optLong("size", 0L),
                         object.optString("type"),
-                        object.optString("mediaUrl")));
+                        object.optString("mediaUrl"),
+                        object.optString("posterPath")));
             }
         } catch (JSONException ex) {
             Logger.w("Recent playback parse failed: " + ex.getMessage());
@@ -70,6 +71,7 @@ public final class RecentPlaybackStore {
                 object.put("size", value.size);
                 object.put("type", value.type);
                 object.put("mediaUrl", value.mediaUrl);
+                object.put("posterPath", value.posterPath);
                 object.put("playedAt", System.currentTimeMillis());
                 array.put(object);
             } catch (JSONException ignored) {

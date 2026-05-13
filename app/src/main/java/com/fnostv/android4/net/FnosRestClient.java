@@ -97,6 +97,10 @@ public final class FnosRestClient {
         return get("/user/info");
     }
 
+    public String authorizationToken() {
+        return token == null ? "" : token;
+    }
+
     public JSONObject runningTasks() throws FnosRpcException {
         return get("/task/running");
     }

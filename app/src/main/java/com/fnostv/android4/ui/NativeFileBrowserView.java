@@ -1,11 +1,7 @@
 package com.fnostv.android4.ui;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.os.AsyncTask;
-import android.util.LruCache;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -19,11 +15,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.fnostv.android4.net.FnosFileEntry;
-import com.fnostv.android4.net.FnosRestClient;
 
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -73,6 +65,11 @@ public final class NativeFileBrowserView {
 
     public void setPosterBaseUrl(String baseUrl) {
         posterBaseUrl = baseUrl == null ? "" : baseUrl;
+        adapter.notifyDataSetChanged();
+    }
+
+    public void setPosterAuthorizationToken(String token) {
+        posterLoader.setAuthorizationToken(token);
         adapter.notifyDataSetChanged();
     }
 
@@ -430,82 +427,4 @@ public final class NativeFileBrowserView {
         }
     }
 
-    private final class PosterLoader {
-        private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(12);
-
-        void load(String baseUrl, FnosFileEntry entry, FrameLayout frame, ImageView image, TextView fallback) {
-            String url = FnosRestClient.posterImageUrl(baseUrl, entry.posterPath, 400);
-            frame.setTag(url);
-            image.setImageDrawable(null);
-            image.setVisibility(View.GONE);
-            fallback.setVisibility(View.VISIBLE);
-            if (url.length() == 0) {
-                return;
-            }
-            Bitmap cached = cache.get(url);
-            if (cached != null) {
-                image.setImageBitmap(cached);
-                image.setVisibility(View.VISIBLE);
-                fallback.setVisibility(View.GONE);
-                return;
-            }
-            new PosterTask(url, frame, image, fallback).execute();
-        }
-
-        private final class PosterTask extends AsyncTask<Void, Void, Bitmap> {
-            private final String url;
-            private final FrameLayout frame;
-            private final ImageView image;
-            private final TextView fallback;
-
-            PosterTask(String url, FrameLayout frame, ImageView image, TextView fallback) {
-                this.url = url;
-                this.frame = frame;
-                this.image = image;
-                this.fallback = fallback;
-            }
-
-            @Override
-            protected Bitmap doInBackground(Void... params) {
-                HttpURLConnection connection = null;
-                InputStream stream = null;
-                try {
-                    connection = (HttpURLConnection) new URL(url).openConnection();
-                    connection.setConnectTimeout(5000);
-                    connection.setReadTimeout(8000);
-                    connection.setRequestProperty("Accept", "image/*");
-                    if (connection.getResponseCode() < 200 || connection.getResponseCode() >= 300) {
-                        return null;
-                    }
-                    stream = connection.getInputStream();
-                    return BitmapFactory.decodeStream(stream);
-                } catch (RuntimeException ignored) {
-                    return null;
-                } catch (Exception ignored) {
-                    return null;
-                } finally {
-                    try {
-                        if (stream != null) {
-                            stream.close();
-                        }
-                    } catch (Exception ignored) {
-                    }
-                    if (connection != null) {
-                        connection.disconnect();
-                    }
-                }
-            }
-
-            @Override
-            protected void onPostExecute(Bitmap bitmap) {
-                if (bitmap == null || !url.equals(frame.getTag())) {
-                    return;
-                }
-                cache.put(url, bitmap);
-                image.setImageBitmap(bitmap);
-                image.setVisibility(View.VISIBLE);
-                fallback.setVisibility(View.GONE);
-            }
-        }
-    }
 }

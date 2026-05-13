@@ -43,6 +43,7 @@ import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.net.RecentPlaybackStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
+import com.fnostv.android4.ui.HomePosterSlots;
 import com.fnostv.android4.ui.NativeFileBrowserView;
 import com.fnostv.android4.ui.NativeHomeView;
 import com.fnostv.android4.ui.NativeVideoPlayerView;
@@ -212,6 +213,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private void loadProfileOrSettings() {
         profile = store.load();
         fileBrowserView.setPosterBaseUrl(profile.baseUrl);
+        fileBrowserView.setPosterAuthorizationToken("");
+        nativeHomeView.setPosterBaseUrl(profile.baseUrl);
+        nativeHomeView.setPosterAuthorizationToken("");
         nativeHomeView.hide();
         fileBrowserView.hide();
         nativeVideoPlayerView.hide();
@@ -770,24 +774,32 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private void updateHomeCounts() {
         int libraryCount = mediaLibraryStore.listOrSeedDefault().size();
         List<FnosFileEntry> known = knownMediaEntries();
+        List<FnosFileEntry> favorites = favoriteStore.list();
+        List<FnosFileEntry> recent = recentPlaybackStore.list();
+        nativeHomeView.updatePosterCards(HomePosterSlots.from(known, recent, favorites));
         nativeHomeView.updateCounts(
-                favoriteStore.list().size(),
+                favorites.size(),
                 libraryCount,
                 known.size(),
                 filterCategory(known, NativeHomeView.ACTION_MOVIES).size(),
                 filterCategory(known, NativeHomeView.ACTION_TV).size(),
                 filterCategory(known, NativeHomeView.ACTION_OTHER).size(),
-                recentPlaybackStore.list().size());
+                recent.size());
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     FnosRestClient client = newRestClient();
                     final FnosMediaCounts counts = client.mediaCounts();
-                    final int recentCount = client.recentItems().entries.size();
+                    final FnosFileList recentList = client.recentItems();
+                    final FnosFileList favoriteList = client.favoriteItems();
+                    final List<FnosFileEntry> mediaEntries = loadHomeMediaEntries(client);
+                    final String posterToken = client.authorizationToken();
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
+                            nativeHomeView.setPosterAuthorizationToken(posterToken);
+                            fileBrowserView.setPosterAuthorizationToken(posterToken);
                             nativeHomeView.updateCounts(
                                     counts.favoriteCount,
                                     counts.libraryCount,
@@ -795,7 +807,8 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                                     counts.movieCount,
                                     counts.tvCount,
                                     counts.otherCount,
-                                    recentCount);
+                                    recentList.entries.size());
+                            nativeHomeView.updatePosterCards(HomePosterSlots.from(mediaEntries, recentList.entries, favoriteList.entries));
                         }
                     });
                 } catch (FnosRpcException ex) {
@@ -805,6 +818,15 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 }
             }
         }, "fnos-rest-home-counts").start();
+    }
+
+    private List<FnosFileEntry> loadHomeMediaEntries(FnosRestClient client) throws FnosRpcException {
+        FnosFileList libraries = client.mediaLibraries();
+        if (libraries.entries.size() > 0) {
+            FnosFileEntry first = libraries.entries.get(0);
+            return client.mediaItems(first.path, NativeHomeView.ACTION_ALL, 12).entries;
+        }
+        return client.mediaItems("", NativeHomeView.ACTION_ALL, 12).entries;
     }
 
     private List<FnosFileEntry> knownMediaEntries() {
