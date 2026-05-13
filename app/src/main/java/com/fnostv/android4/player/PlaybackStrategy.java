@@ -17,6 +17,10 @@ public final class PlaybackStrategy {
         int cache = isRemoteUrl(url) ? PlaybackOptions.CACHE_REMOTE : PlaybackOptions.CACHE_STABLE;
         int networkMs = cache == PlaybackOptions.CACHE_REMOTE ? 6000 : 3000;
         int fileMs = cache == PlaybackOptions.CACHE_REMOTE ? 3000 : 2000;
+        if (cache == PlaybackOptions.CACHE_REMOTE && isLikelyLanUrl(url) && !highRisk) {
+            networkMs = 4000;
+            fileMs = 2000;
+        }
         boolean fluent = shouldPreferFluent(format, fileName, size);
         if (fluent) {
             networkMs = Math.max(networkMs, cache == PlaybackOptions.CACHE_REMOTE ? 8000 : 5000);
@@ -100,6 +104,51 @@ public final class PlaybackStrategy {
     private static boolean isRemoteUrl(String url) {
         String lower = lower(url);
         return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("rtsp://");
+    }
+
+    private static boolean isLikelyLanUrl(String url) {
+        String host = host(url);
+        if (host.equals("localhost") || host.startsWith("127.")) {
+            return true;
+        }
+        if (host.startsWith("10.") || host.startsWith("192.168.")) {
+            return true;
+        }
+        if (!host.startsWith("172.")) {
+            return false;
+        }
+        String rest = host.substring(4);
+        int dot = rest.indexOf('.');
+        if (dot <= 0) {
+            return false;
+        }
+        try {
+            int second = Integer.parseInt(rest.substring(0, dot));
+            return second >= 16 && second <= 31;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
+
+    private static String host(String url) {
+        String value = lower(url);
+        int scheme = value.indexOf("://");
+        if (scheme >= 0) {
+            value = value.substring(scheme + 3);
+        }
+        int slash = value.indexOf('/');
+        if (slash >= 0) {
+            value = value.substring(0, slash);
+        }
+        int at = value.lastIndexOf('@');
+        if (at >= 0) {
+            value = value.substring(at + 1);
+        }
+        int colon = value.indexOf(':');
+        if (colon >= 0) {
+            value = value.substring(0, colon);
+        }
+        return value;
     }
 
     private static String lower(String value) {

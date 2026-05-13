@@ -4,6 +4,8 @@ public final class PlaybackStrategyTest {
     public static void main(String[] args) {
         highRiskRemoteMkvUsesSoftwareFluentProfile();
         normalMp4KeepsHardwareStableProfile();
+        lanHttpMp4UsesFasterStableStartup();
+        highRiskLanMkvStillUsesSoftwareFluentProfile();
         frequentBufferingRaisesCacheWithoutUnboundedGrowth();
     }
 
@@ -35,6 +37,37 @@ public final class PlaybackStrategyTest {
         assertEquals(PlaybackOptions.PROFILE_STABLE, options.profileMode);
         assertFalse(options.allowFrameDrop);
         assertFalse(options.fastDecode);
+    }
+
+    private static void lanHttpMp4UsesFasterStableStartup() {
+        PlaybackOptions options = PlaybackStrategy.initialOptions(
+                "http://192.168.0.198:5666/v/api/v1/file/video.mp4",
+                "Movie.1080p.H264.mp4",
+                1024L * 1024L * 1024L,
+                true);
+
+        assertEquals(PlaybackOptions.DECODER_HARDWARE, options.decoderMode);
+        assertEquals(PlaybackOptions.CACHE_REMOTE, options.cacheMode);
+        assertEquals(PlaybackOptions.PROFILE_STABLE, options.profileMode);
+        assertEquals(4000, options.networkCachingMs);
+        assertEquals(2000, options.fileCachingMs);
+        assertFalse(options.allowFrameDrop);
+        assertFalse(options.fastDecode);
+    }
+
+    private static void highRiskLanMkvStillUsesSoftwareFluentProfile() {
+        PlaybackOptions options = PlaybackStrategy.initialOptions(
+                "http://192.168.0.198:5666/v/api/v1/file/movie.mkv",
+                "Movie.2160p.HEVC.mkv",
+                8L * 1024L * 1024L * 1024L,
+                true);
+
+        assertEquals(PlaybackOptions.DECODER_SOFTWARE, options.decoderMode);
+        assertEquals(PlaybackOptions.CACHE_REMOTE, options.cacheMode);
+        assertEquals(PlaybackOptions.PROFILE_FLUENT, options.profileMode);
+        assertTrue(options.networkCachingMs >= 8000);
+        assertTrue(options.allowFrameDrop);
+        assertTrue(options.fastDecode);
     }
 
     private static void frequentBufferingRaisesCacheWithoutUnboundedGrowth() {
