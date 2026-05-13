@@ -43,6 +43,7 @@ import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.net.RecentPlaybackStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
+import com.fnostv.android4.ui.FileBrowserLabels;
 import com.fnostv.android4.ui.HomePosterSlots;
 import com.fnostv.android4.ui.NativeFileBrowserView;
 import com.fnostv.android4.ui.NativeHomeView;
@@ -633,9 +634,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-        if (result.success) {
-            statusOverlay.hide();
-            fileBrowserView.showCustom(result.title, result.subtitle, result.list.entries, result.sortEntries);
+                        if (result.success) {
+                            statusOverlay.hide();
+                            fileBrowserView.showCustom(result.title, result.subtitle, result.list.entries, result.sortEntries);
                         } else {
                             showStatus(result.message);
                             nativeHomeView.show();
@@ -695,8 +696,11 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         }
         FileLoadResult fallback = loadFileList(path);
         if (fallback.success) {
-            String subtitle = path == null || path.length() == 0 ? "影视中心 API 未稳定，已进入文件模式" : path;
-            return MediaLoadResult.success("影视入口（文件模式）", subtitle, fallback.list, true);
+            return MediaLoadResult.success(
+                    FileBrowserLabels.mediaFallbackTitle(),
+                    FileBrowserLabels.mediaFallbackSubtitle(path),
+                    fallback.list,
+                    true);
         }
         return MediaLoadResult.failure(fallback.message);
     }

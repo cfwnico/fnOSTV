@@ -357,9 +357,9 @@ public final class NativeFileBrowserView {
             ImageView image = (ImageView) poster.getChildAt(0);
             TextView fallback = (TextView) poster.getChildAt(1);
             TextView title = (TextView) card.getChildAt(1);
-            fallback.setText(posterText(entry));
+            fallback.setText(FileBrowserLabels.posterPlaceholder(entry, listener.isFileFavorite(entry)));
             posterLoader.load(posterBaseUrl, entry, poster, image, fallback);
-            title.setText(titleText(entry));
+            title.setText(FileBrowserLabels.cardTitle(entry));
             card.setContentDescription(entry.name);
             return card;
         }
@@ -382,12 +382,12 @@ public final class NativeFileBrowserView {
             TextView fallback = new TextView(context);
             fallback.setTextColor(FnosTheme.COLOR_TEXT);
             fallback.setTextSize(15);
-            fallback.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            fallback.setGravity(Gravity.CENTER);
             fallback.setPadding(dp(8), dp(8), dp(8), dp(12));
             poster.addView(fallback, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
-            card.addView(poster, new LinearLayout.LayoutParams(dp(160), dp(226)));
+            card.addView(poster, new LinearLayout.LayoutParams(dp(160), dp(170)));
 
             TextView title = new TextView(context);
             title.setTextColor(FnosTheme.COLOR_TEXT);
@@ -398,32 +398,6 @@ public final class NativeFileBrowserView {
             titleParams.topMargin = dp(8);
             card.addView(title, titleParams);
             return card;
-        }
-
-        private String posterText(FnosFileEntry entry) {
-            String badge;
-            if (entry.directory) {
-                badge = "目录";
-            } else {
-                badge = entry.formatLabel();
-            }
-            if (listener.isFileFavorite(entry)) {
-                badge = "* " + badge;
-            }
-            if (entry.posterPath.length() > 0) {
-                return "海报\n\n" + badge;
-            }
-            if (entry.directory) {
-                return "影视\n\n" + badge;
-            }
-            return badge;
-        }
-
-        private String titleText(FnosFileEntry entry) {
-            if (entry.name.length() <= 10) {
-                return entry.name;
-            }
-            return entry.name.substring(0, 10) + "...";
         }
     }
 
