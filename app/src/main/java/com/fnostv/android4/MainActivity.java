@@ -316,6 +316,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         webView.setVisibility(View.GONE);
         fileBrowserView.hide();
         nativeVideoPlayerView.hide();
+        nativeHomeView.updateUser(profile == null ? "" : profile.username, profile == null ? "" : profile.username, true);
         updateHomeCounts();
         nativeHomeView.show();
     }
@@ -352,6 +353,31 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         }
         if (NativeHomeView.ACTION_USER.equals(action)) {
             openSettings(null, "users");
+            return;
+        }
+        if (NativeHomeView.ACTION_USER_PASSWORD.equals(action)) {
+            openSettings(null, "password");
+            return;
+        }
+        if (NativeHomeView.ACTION_USER_PREFERENCE.equals(action)) {
+            openSettings(null, "preference");
+            return;
+        }
+        if (NativeHomeView.ACTION_USER_APPEARANCE.equals(action)) {
+            openSettings(null, "appearance");
+            return;
+        }
+        if (NativeHomeView.ACTION_HELP.equals(action)) {
+            showStatus("帮助中心入口已复刻，当前 Android 4 版本暂未接入在线帮助页。");
+            return;
+        }
+        if (NativeHomeView.ACTION_ABOUT.equals(action)) {
+            showStatus("飞牛影视 Android4 复刻版\n已兼容原生播放、媒体库和设置页。");
+            return;
+        }
+        if (NativeHomeView.ACTION_LOGOUT.equals(action)) {
+            sessionStore.clear();
+            openSettings("已退出登录，请重新登录。");
             return;
         }
         if (NativeHomeView.ACTION_SETTINGS.equals(action)) {

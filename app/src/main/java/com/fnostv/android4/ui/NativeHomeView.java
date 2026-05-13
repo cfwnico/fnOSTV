@@ -26,11 +26,18 @@ public final class NativeHomeView {
     public static final String ACTION_USER = "user";
     public static final String ACTION_SETTINGS = "settings";
     public static final String ACTION_RECENT = "recent";
+    public static final String ACTION_USER_PASSWORD = "settings-password";
+    public static final String ACTION_USER_PREFERENCE = "settings-preference";
+    public static final String ACTION_USER_APPEARANCE = "settings-appearance";
+    public static final String ACTION_HELP = "help";
+    public static final String ACTION_ABOUT = "about";
+    public static final String ACTION_LOGOUT = "logout";
 
     private final Context context;
     private final Listener listener;
     private FrameLayout view;
     private View firstNav;
+    private LinearLayout userMenuView;
     private TextView favoriteCountView;
     private TextView libraryCountView;
     private TextView allCountView;
@@ -40,6 +47,9 @@ public final class NativeHomeView {
     private TextView heroCard;
     private TextView recentCard;
     private TextView favoriteCard;
+    private String username = "--";
+    private String sourceName = "--";
+    private boolean admin;
 
     public NativeHomeView(Context context, Listener listener) {
         this.context = context;
@@ -59,6 +69,12 @@ public final class NativeHomeView {
 
         shell.addView(sidebar(), new LinearLayout.LayoutParams(dp(250), ViewGroup.LayoutParams.MATCH_PARENT));
         shell.addView(content(), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        userMenuView = userMenu();
+        userMenuView.setVisibility(View.GONE);
+        FrameLayout.LayoutParams menuParams = new FrameLayout.LayoutParams(dp(208), dp(320), Gravity.TOP | Gravity.RIGHT);
+        menuParams.topMargin = dp(62);
+        menuParams.rightMargin = dp(90);
+        view.addView(userMenuView, menuParams);
         return view;
     }
 
@@ -96,6 +112,19 @@ public final class NativeHomeView {
         }
         if (favoriteCard != null) {
             favoriteCard.setText(favoriteCount == 0 ? "收藏\n快速访问" : "收藏\n" + favoriteCount + " 个项目");
+        }
+    }
+
+    public void updateUser(String username, String sourceName, boolean admin) {
+        this.username = emptyToDefault(username, "--");
+        this.sourceName = emptyToDefault(sourceName, this.username);
+        this.admin = admin;
+        refreshUserMenu();
+    }
+
+    public void hideUserMenu() {
+        if (userMenuView != null) {
+            userMenuView.setVisibility(View.GONE);
         }
     }
 
@@ -192,6 +221,7 @@ public final class NativeHomeView {
         row.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                hideUserMenu();
                 listener.onHomeAction(action);
             }
         });
@@ -267,10 +297,130 @@ public final class NativeHomeView {
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                listener.onHomeAction(action);
+                if (ACTION_USER.equals(action)) {
+                    toggleUserMenu();
+                } else {
+                    hideUserMenu();
+                    listener.onHomeAction(action);
+                }
             }
         });
         return button;
+    }
+
+    private LinearLayout userMenu() {
+        LinearLayout menu = new LinearLayout(context);
+        menu.setOrientation(LinearLayout.VERTICAL);
+        menu.setPadding(0, dp(12), 0, dp(10));
+        menu.setBackgroundDrawable(FnosTheme.stroked(FnosTheme.COLOR_CARD, FnosTheme.COLOR_STROKE, 8, context));
+        refreshUserMenu(menu);
+        return menu;
+    }
+
+    private void refreshUserMenu() {
+        if (userMenuView != null) {
+            refreshUserMenu(userMenuView);
+        }
+    }
+
+    private void refreshUserMenu(LinearLayout menu) {
+        menu.removeAllViews();
+        menu.addView(userHeader(), rowParams(0, 10));
+        menu.addView(menuItem("▢", "修改密码", ACTION_USER_PASSWORD), menuItemParams());
+        menu.addView(menuItem("▷", "播放偏好设置", ACTION_USER_PREFERENCE), menuItemParams());
+        menu.addView(menuItem("◉", "外观", ACTION_USER_APPEARANCE), menuItemParams());
+        menu.addView(menuDivider(), dividerParams());
+        menu.addView(menuItem("?", "帮助中心", ACTION_HELP), menuItemParams());
+        menu.addView(menuItem("i", "关于飞牛影视", ACTION_ABOUT), menuItemParams());
+        menu.addView(menuDivider(), dividerParams());
+        menu.addView(menuItem("↪", "退出", ACTION_LOGOUT), menuItemParams());
+    }
+
+    private View userHeader() {
+        LinearLayout header = new LinearLayout(context);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(16), 0, dp(14), 0);
+        TextView avatar = new TextView(context);
+        avatar.setText(initial(username));
+        avatar.setTextColor(Color.WHITE);
+        avatar.setTextSize(18);
+        avatar.setGravity(Gravity.CENTER);
+        avatar.setBackgroundDrawable(FnosTheme.rounded(0xFF7588D1, 22, context));
+        header.addView(avatar, new LinearLayout.LayoutParams(dp(44), dp(44)));
+
+        LinearLayout texts = new LinearLayout(context);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(dp(10), 0, 0, 0);
+        LinearLayout nameRow = new LinearLayout(context);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = new TextView(context);
+        name.setText(username);
+        name.setTextColor(FnosTheme.COLOR_TEXT);
+        name.setTextSize(14);
+        name.setTypeface(null, 1);
+        nameRow.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        if (admin) {
+            TextView pill = new TextView(context);
+            pill.setText("管理员");
+            pill.setTextColor(FnosTheme.COLOR_PRIMARY);
+            pill.setTextSize(11);
+            pill.setGravity(Gravity.CENTER);
+            pill.setBackgroundDrawable(FnosTheme.rounded(0xFF0D376F, 4, context));
+            nameRow.addView(pill, new LinearLayout.LayoutParams(dp(42), dp(20)));
+        }
+        texts.addView(nameRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView source = new TextView(context);
+        source.setText(sourceName);
+        source.setTextColor(FnosTheme.COLOR_TEXT_MUTED);
+        source.setTextSize(12);
+        texts.addView(source);
+        header.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        return header;
+    }
+
+    private View menuItem(String icon, String label, final String action) {
+        LinearLayout row = new LinearLayout(context);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(18), 0, dp(12), 0);
+        row.setFocusable(true);
+        row.setClickable(true);
+        FocusStyler.apply(row, FnosTheme.COLOR_CARD, FnosTheme.COLOR_CARD_FOCUSED, 4);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hideUserMenu();
+                listener.onHomeAction(action);
+            }
+        });
+        TextView iconView = new TextView(context);
+        iconView.setText(icon);
+        iconView.setTextColor(FnosTheme.COLOR_TEXT);
+        iconView.setTextSize(15);
+        iconView.setGravity(Gravity.CENTER);
+        row.addView(iconView, new LinearLayout.LayoutParams(dp(22), ViewGroup.LayoutParams.MATCH_PARENT));
+        TextView text = new TextView(context);
+        text.setText(label);
+        text.setTextColor(FnosTheme.COLOR_TEXT);
+        text.setTextSize(14);
+        text.setPadding(dp(8), 0, 0, 0);
+        row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        return row;
+    }
+
+    private View menuDivider() {
+        View divider = new View(context);
+        divider.setBackgroundColor(FnosTheme.COLOR_STROKE);
+        return divider;
+    }
+
+    private void toggleUserMenu() {
+        if (userMenuView == null) {
+            return;
+        }
+        userMenuView.setVisibility(userMenuView.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+        if (userMenuView.getVisibility() == View.VISIBLE) {
+            userMenuView.requestFocus();
+        }
     }
 
     private TextView countView() {
@@ -305,6 +455,17 @@ public final class NativeHomeView {
         return params;
     }
 
+    private LinearLayout.LayoutParams menuItemParams() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34));
+    }
+
+    private LinearLayout.LayoutParams dividerParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+        params.topMargin = dp(8);
+        params.bottomMargin = dp(8);
+        return params;
+    }
+
     private LinearLayout.LayoutParams iconParams() {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(36), dp(36));
         params.leftMargin = dp(10);
@@ -313,5 +474,15 @@ public final class NativeHomeView {
 
     private int dp(int value) {
         return FnosTheme.dp(context, value);
+    }
+
+    private String initial(String value) {
+        String text = emptyToDefault(value, "?");
+        return text.substring(0, 1).toUpperCase();
+    }
+
+    private String emptyToDefault(String value, String fallback) {
+        String text = value == null ? "" : value.trim();
+        return text.length() == 0 ? fallback : text;
     }
 }
