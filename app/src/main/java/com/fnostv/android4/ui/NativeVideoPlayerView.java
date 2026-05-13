@@ -62,6 +62,7 @@ public final class NativeVideoPlayerView {
     private TextView speedView;
     private TextView pictureView;
     private TextView resolutionView;
+    private TextView statusView;
     private TextView hintView;
     private SurfaceHolder surfaceHolder;
     private FnosFileEntry currentEntry;
@@ -76,6 +77,8 @@ public final class NativeVideoPlayerView {
     private boolean preferHardwareCodec;
     private boolean retriedSoftwareCodec;
     private boolean retriedIjkEngine;
+    private boolean firstFrameSeen;
+    private long prepareStartedAtMs;
     private int bufferingCount;
     private int speedIndex;
     private int sourceIndex;
@@ -201,6 +204,9 @@ public final class NativeVideoPlayerView {
         controlRow.addView(speedView);
         controlRow.addView(pictureView);
         controlRow.addView(resolutionView);
+        statusView = controlText(playbackStatusLabel());
+        statusView.setTextColor(0xFFBFD8FF);
+        statusView.setTextSize(12);
 
         seekBar = new SeekBar(context);
         seekBar.setMax(1000);
@@ -233,6 +239,9 @@ public final class NativeVideoPlayerView {
         hintView.setText("左右快退/快进，确认暂停，菜单倍速，上键画面，下键清晰度");
 
         controlBar.addView(controlRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        controlBar.addView(statusView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         controlBar.addView(seekBar, new LinearLayout.LayoutParams(
@@ -285,6 +294,8 @@ public final class NativeVideoPlayerView {
         preferHardwareCodec = entry != null && entry.prefersHardwarePlayback();
         retriedSoftwareCodec = false;
         retriedIjkEngine = false;
+        firstFrameSeen = false;
+        prepareStartedAtMs = 0L;
         bufferingCount = 0;
         speedIndex = 0;
         videoWidth = 0;
@@ -458,9 +469,20 @@ public final class NativeVideoPlayerView {
 
                 @Override
                 public void onFirstFrame() {
+                    long startupMs = prepareStartedAtMs <= 0L
+                            ? 0L
+                            : Math.max(0L, System.currentTimeMillis() - prepareStartedAtMs);
                     Logger.d(player.name() + " first frame file=" + fileName()
                             + " source=" + currentSource().label
-                            + " pos=" + position());
+                            + " pos=" + position()
+                            + " startupMs=" + startupMs
+                            + " options=" + optionsLabel());
+                    if (!firstFrameSeen) {
+                        firstFrameSeen = true;
+                        showHint("首帧 " + startupMs + "ms · " + playbackStatusLabel());
+                        updateControlText();
+                        showControlsTemporarily();
+                    }
                 }
 
                 @Override
@@ -477,6 +499,9 @@ public final class NativeVideoPlayerView {
                     Logger.d(player.name() + " " + message + " file=" + fileName());
                 }
             });
+            prepareStartedAtMs = System.currentTimeMillis();
+            showHint("正在启动 " + player.name() + " · " + playbackStatusLabel());
+            updateControlText();
             player.prepare(currentUrl, playbackOptions);
             Logger.d(player.name() + " preparing file=" + fileName() + " format=" + formatLabel()
                     + " hw=" + preferHardwareCodec
@@ -504,6 +529,7 @@ public final class NativeVideoPlayerView {
                 ? buildPlaybackOptions(currentUrl).withSoftwareDecoder()
                 : playbackOptions.withSoftwareDecoder();
         prepared = false;
+        firstFrameSeen = false;
         loadingView.setVisibility(View.VISIBLE);
         showHint(reason);
         releasePlayer(true);
@@ -521,6 +547,7 @@ public final class NativeVideoPlayerView {
         preferHardwareCodec = currentEntry != null && currentEntry.prefersHardwarePlayback();
         playbackOptions = buildPlaybackOptions(currentUrl);
         prepared = false;
+        firstFrameSeen = false;
         loadingView.setVisibility(View.VISIBLE);
         showHint("VLC播放失败，切换兼容播放器");
         releasePlayer(true);
@@ -536,6 +563,7 @@ public final class NativeVideoPlayerView {
                 + " options=" + optionsLabel());
         playbackOptions = PlaybackStrategy.onFrequentBuffering(playbackOptions);
         prepared = false;
+        firstFrameSeen = false;
         bufferingCount = 0;
         int savedPosition = position();
         pendingSeekMs = savedPosition > 0 ? savedPosition : pendingSeekMs;
@@ -733,6 +761,7 @@ public final class NativeVideoPlayerView {
         handler.removeCallbacks(seekCommitRunnable);
         handler.removeCallbacks(seekSettledRunnable);
         prepared = false;
+        firstFrameSeen = false;
         retriedSoftwareCodec = false;
         retriedIjkEngine = false;
         preferHardwareCodec = currentEntry != null && currentEntry.prefersHardwarePlayback();
@@ -778,6 +807,21 @@ public final class NativeVideoPlayerView {
             label += " · " + videoWidth + "x" + videoHeight;
         }
         resolutionView.setText(label);
+        if (statusView != null) {
+            statusView.setText(playbackStatusLabel());
+        }
+    }
+
+    private String playbackStatusLabel() {
+        String engine = currentPlayer == null ? "--" : currentPlayer.name();
+        if (playbackOptions == null) {
+            return "内核 " + engine;
+        }
+        return "内核 " + engine
+                + " · " + playbackOptions.decoderLabel()
+                + " · " + playbackOptions.profileLabel()
+                + " · " + playbackOptions.cacheLabel()
+                + " " + playbackOptions.networkCachingMs + "ms";
     }
 
     private int duration() {

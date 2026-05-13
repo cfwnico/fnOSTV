@@ -17,21 +17,27 @@ public final class PlaybackStrategy {
         int cache = isRemoteUrl(url) ? PlaybackOptions.CACHE_REMOTE : PlaybackOptions.CACHE_STABLE;
         int networkMs = cache == PlaybackOptions.CACHE_REMOTE ? 6000 : 3000;
         int fileMs = cache == PlaybackOptions.CACHE_REMOTE ? 3000 : 2000;
+        boolean lowLatency = false;
         if (cache == PlaybackOptions.CACHE_REMOTE && isLikelyLanUrl(url) && !highRisk) {
-            networkMs = 4000;
-            fileMs = 2000;
+            networkMs = 3500;
+            fileMs = 1500;
+            lowLatency = true;
+        } else if (cache == PlaybackOptions.CACHE_STABLE && !highRisk) {
+            networkMs = 2500;
+            fileMs = 1200;
+            lowLatency = true;
         }
         boolean fluent = shouldPreferFluent(format, fileName, size);
         if (fluent) {
             networkMs = Math.max(networkMs, cache == PlaybackOptions.CACHE_REMOTE ? 8000 : 5000);
             fileMs = Math.max(fileMs, 2500);
         }
-        int probeSizeKb = fluent ? 2048 : 768;
-        int analyzeDurationMs = fluent ? 2500 : 1200;
+        int probeSizeKb = fluent ? 2048 : (lowLatency ? 512 : 768);
+        int analyzeDurationMs = fluent ? 2500 : (lowLatency ? 800 : 1200);
         return new PlaybackOptions(
                 decoder,
                 cache,
-                fluent ? PlaybackOptions.PROFILE_FLUENT : PlaybackOptions.PROFILE_STABLE,
+                fluent ? PlaybackOptions.PROFILE_FLUENT : (lowLatency ? PlaybackOptions.PROFILE_LOW_LATENCY : PlaybackOptions.PROFILE_STABLE),
                 networkMs,
                 fileMs,
                 fluent,

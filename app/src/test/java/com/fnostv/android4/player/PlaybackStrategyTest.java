@@ -4,7 +4,8 @@ public final class PlaybackStrategyTest {
     public static void main(String[] args) {
         highRiskRemoteMkvUsesSoftwareFluentProfile();
         normalMp4KeepsHardwareStableProfile();
-        lanHttpMp4UsesFasterStableStartup();
+        lanHttpMp4UsesLowLatencyStartup();
+        localMp4UsesLowLatencyStartup();
         highRiskLanMkvStillUsesSoftwareFluentProfile();
         frequentBufferingRaisesCacheWithoutUnboundedGrowth();
     }
@@ -39,7 +40,7 @@ public final class PlaybackStrategyTest {
         assertFalse(options.fastDecode);
     }
 
-    private static void lanHttpMp4UsesFasterStableStartup() {
+    private static void lanHttpMp4UsesLowLatencyStartup() {
         PlaybackOptions options = PlaybackStrategy.initialOptions(
                 "http://192.168.0.198:5666/v/api/v1/file/video.mp4",
                 "Movie.1080p.H264.mp4",
@@ -48,9 +49,25 @@ public final class PlaybackStrategyTest {
 
         assertEquals(PlaybackOptions.DECODER_HARDWARE, options.decoderMode);
         assertEquals(PlaybackOptions.CACHE_REMOTE, options.cacheMode);
-        assertEquals(PlaybackOptions.PROFILE_STABLE, options.profileMode);
-        assertEquals(4000, options.networkCachingMs);
-        assertEquals(2000, options.fileCachingMs);
+        assertEquals(PlaybackOptions.PROFILE_LOW_LATENCY, options.profileMode);
+        assertEquals(3500, options.networkCachingMs);
+        assertEquals(1500, options.fileCachingMs);
+        assertFalse(options.allowFrameDrop);
+        assertFalse(options.fastDecode);
+    }
+
+    private static void localMp4UsesLowLatencyStartup() {
+        PlaybackOptions options = PlaybackStrategy.initialOptions(
+                "/vol2/1000/movie.mp4",
+                "Movie.1080p.H264.mp4",
+                1024L * 1024L * 1024L,
+                true);
+
+        assertEquals(PlaybackOptions.DECODER_HARDWARE, options.decoderMode);
+        assertEquals(PlaybackOptions.CACHE_STABLE, options.cacheMode);
+        assertEquals(PlaybackOptions.PROFILE_LOW_LATENCY, options.profileMode);
+        assertEquals(2500, options.networkCachingMs);
+        assertEquals(1200, options.fileCachingMs);
         assertFalse(options.allowFrameDrop);
         assertFalse(options.fastDecode);
     }
