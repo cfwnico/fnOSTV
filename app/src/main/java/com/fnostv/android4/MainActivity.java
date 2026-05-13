@@ -286,10 +286,14 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     @Override
     public boolean openSettings() {
-        return openSettings(null);
+        return openSettings(null, null);
     }
 
     private boolean openSettings(String errorMessage) {
+        return openSettings(errorMessage, null);
+    }
+
+    private boolean openSettings(String errorMessage, String page) {
         if (settingsOpen) {
             return true;
         }
@@ -297,6 +301,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         Intent intent = new Intent(this, SettingsActivity.class);
         if (errorMessage != null && errorMessage.length() > 0) {
             intent.putExtra(Constants.EXTRA_SETTINGS_ERROR_MESSAGE, errorMessage);
+        }
+        if (page != null && page.length() > 0) {
+            intent.putExtra(Constants.EXTRA_SETTINGS_PAGE, page);
         }
         startActivityForResult(intent, Constants.REQUEST_SETTINGS);
         return true;
@@ -344,7 +351,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return;
         }
         if (NativeHomeView.ACTION_USER.equals(action)) {
-            showStatus(profile == null ? "未登录" : "当前用户：" + profile.username);
+            openSettings(null, "users");
             return;
         }
         if (NativeHomeView.ACTION_SETTINGS.equals(action)) {

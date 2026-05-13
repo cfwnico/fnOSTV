@@ -101,6 +101,18 @@ public final class FnosRestClient {
         return get("/task/running");
     }
 
+    public JSONArray managerUsers() throws FnosRpcException {
+        return dataArray(get("/manager/user/list"));
+    }
+
+    public JSONArray taskSchedules() throws FnosRpcException {
+        return dataArray(get("/task/schedule/list"));
+    }
+
+    public JSONArray gpuList() throws FnosRpcException {
+        return dataArray(get("/server/gpu/list"));
+    }
+
     public static String mediaItemPayload(String ancestorGuid, String category, int pageSize) throws JSONException {
         JSONObject body = new JSONObject();
         if (ancestorGuid != null && ancestorGuid.length() > 0) {
@@ -309,6 +321,11 @@ public final class FnosRestClient {
             throw new JSONException("missing data object");
         }
         return data;
+    }
+
+    private static JSONArray dataArray(JSONObject response) {
+        JSONArray data = response == null ? null : response.optJSONArray("data");
+        return data == null ? new JSONArray() : data;
     }
 
     private static List<FnosFileEntry> parseEntries(JSONArray list) {

@@ -24,14 +24,19 @@ import com.fnostv.android4.media.MediaLibraryClassifier;
 import com.fnostv.android4.media.MediaLibraryScanner;
 import com.fnostv.android4.media.MediaLibraryStore;
 import com.fnostv.android4.net.FnosFileEntry;
+import com.fnostv.android4.net.FnosRestClient;
 import com.fnostv.android4.net.FnosRpcClient;
 import com.fnostv.android4.net.FnosRpcException;
 import com.fnostv.android4.net.FnosSession;
 import com.fnostv.android4.net.FnosSessionStore;
+import com.fnostv.android4.net.FnosSettingsSummary;
 import com.fnostv.android4.ui.NativeSettingsView;
 import com.fnostv.android4.ui.SettingsForm;
 import com.fnostv.android4.util.Constants;
 import com.fnostv.android4.util.Logger;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +56,7 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
     private MediaIndexStore mediaIndexStore;
     private SettingsForm settingsForm;
     private NativeSettingsView nativeSettingsView;
+    private FnosSettingsSummary settingsSummary = FnosSettingsSummary.empty();
     private boolean accountEditorOpen;
     private boolean scanning;
 
@@ -65,6 +71,7 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
         mediaIndexStore = new MediaIndexStore(this);
         settingsForm = new SettingsForm(this, this);
         nativeSettingsView = new NativeSettingsView(this, this);
+        nativeSettingsView.setInitialPage(getIntent().getStringExtra(Constants.EXTRA_SETTINGS_PAGE));
 
         String error = getIntent().getStringExtra(Constants.EXTRA_SETTINGS_ERROR_MESSAGE);
         if (error != null || !store.load().isReady()) {
@@ -183,6 +190,11 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
         }, "fnos-media-library-scan").start();
     }
 
+    @Override
+    public void onSettingsAction(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
     private void showAccountEditor(String errorMessage) {
         accountEditorOpen = true;
         setContentView(settingsForm.create(store.load(), errorMessage));
@@ -190,11 +202,65 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
 
     private void showNativeSettings(String status) {
         accountEditorOpen = false;
-        setContentView(nativeSettingsView.create(mediaLibraryStore.listOrSeedDefault(), status));
+        setContentView(nativeSettingsView.create(mediaLibraryStore.listOrSeedDefault(), status, settingsSummary));
+        loadSettingsSummary();
     }
 
     private void refreshNativeSettings(String status) {
-        nativeSettingsView.refresh(mediaLibraryStore.listOrSeedDefault(), status);
+        nativeSettingsView.refresh(mediaLibraryStore.listOrSeedDefault(), status, settingsSummary);
+    }
+
+    private void loadSettingsSummary() {
+        final ServerProfile profile = store.load();
+        if (!profile.isReady()) {
+            return;
+        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    FnosRestClient client = new FnosRestClient(profile);
+                    JSONObject userInfo = client.userInfo();
+                    JSONObject config = client.systemConfig();
+                    JSONObject version = client.version();
+                    JSONObject server = client.serverInfo();
+                    JSONArray users = client.managerUsers();
+                    JSONArray tasks = client.taskSchedules();
+                    JSONArray gpu = client.gpuList();
+                    final FnosSettingsSummary loaded = FnosSettingsSummary.fromResponses(
+                            userInfo,
+                            config,
+                            version,
+                            server,
+                            users,
+                            tasks,
+                            gpu);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            settingsSummary = loaded;
+                            refreshNativeSettings("");
+                        }
+                    });
+                } catch (FnosRpcException ex) {
+                    Logger.w("Settings summary load failed: " + ex.getMessage());
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            refreshNativeSettings("设置详情同步失败，请检查登录状态。");
+                        }
+                    });
+                } catch (RuntimeException ex) {
+                    Logger.w("Settings summary crashed: " + ex.getMessage());
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            refreshNativeSettings("设置详情同步异常。");
+                        }
+                    });
+                }
+            }
+        }, "fnos-settings-summary").start();
     }
 
     private void showLibraryEditor(final MediaLibrary existing) {

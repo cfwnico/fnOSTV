@@ -10,6 +10,7 @@ public final class FnosRestClientTest {
         parsesRestItemsIntoNativeBrowserEntries();
         parsesPosterMetadataFromRestItems();
         buildsPosterImageUrlFromServerPath();
+        parsesSettingsSummaryForNativeSettings();
     }
 
     private static void mediaItemPayloadMatchesWebContract() throws Exception {
@@ -90,6 +91,38 @@ public final class FnosRestClientTest {
         assertEquals(
                 "https://cdn.example/poster.webp",
                 FnosRestClient.posterImageUrl("http://192.168.0.198:5666", "https://cdn.example/poster.webp", 400));
+    }
+
+    private static void parsesSettingsSummaryForNativeSettings() throws Exception {
+        FnosSettingsSummary summary = FnosSettingsSummary.fromResponses(
+                new JSONObject("{\"code\":0,\"data\":{\"username\":\"XDORG\",\"lan\":\"zh-CN\",\"is_admin\":1,"
+                        + "\"sources\":[{\"source_name\":\"XDORG\"}]}}"),
+                new JSONObject("{\"code\":0,\"data\":{\"server_name\":\"XDORG\"}}"),
+                new JSONObject("{\"code\":0,\"data\":{\"version\":\"0.9.4\",\"mediasrvVersion\":\"0.8.34\"}}"),
+                new JSONObject("{\"code\":0,\"data\":{\"name\":\"XDORG\",\"lan\":\"zh-CN\",\"gpu_acc\":1,"
+                        + "\"gpu_prefer\":1,\"cpu_allow_decoding\":1,\"direct_link_enable\":1,"
+                        + "\"direct_link_allowed_level\":0,\"file_monitor\":1}}"),
+                new JSONArray("[{\"username\":\"XDORG\",\"is_admin\":1,\"media_permission\":2,"
+                        + "\"sources\":[{\"source_name\":\"XDORG\"}],\"last_login_time\":1778684418}]"),
+                new JSONArray("[{\"type\":\"TaskItemScrap\",\"status\":1},{\"type\":\"TaskSubtitleExtra\",\"status\":1}]"),
+                new JSONArray("[{\"sequence\":1,\"model\":\"Intel Alder Lake-N [Intel Graphics]\"}]"));
+
+        assertEquals("XDORG", summary.username);
+        assertEquals("X", summary.userInitial);
+        assertTrue(summary.admin);
+        assertEquals("XDORG", summary.serverName);
+        assertEquals("中文简体", summary.languageLabel);
+        assertEquals("0.9.4", summary.version);
+        assertEquals("0.8.34", summary.serviceVersion);
+        assertEquals("GPU1 Intel Alder Lake-N [Intel Graphics]", summary.preferredGpuLabel);
+        assertEquals("仅管理员", summary.directLinkAllowedLabel);
+        assertEquals(1, summary.userRows.size());
+        assertEquals("管理员", summary.userRows.get(0).roleLabel);
+        assertEquals("全部", summary.userRows.get(0).permissionLabel);
+        assertEquals("XDORG", summary.userRows.get(0).sourceName);
+        assertEquals(2, summary.taskRows.size());
+        assertEquals("扫描媒体库文件", summary.taskRows.get(0).label);
+        assertEquals("已启用", summary.taskRows.get(0).statusLabel);
     }
 
     private static void assertEquals(Object expected, Object actual) {
