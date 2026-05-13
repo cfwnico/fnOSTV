@@ -17,7 +17,7 @@ The repository is already a Java Android application targeting legacy TV boxes a
 
 The Feiniu Video web app uses modern module-based frontend assets. Android 4 WebView cannot reliably render it, so the visual replica must be native Android UI, not a WebView wrapper.
 
-The available 2026-05-13 captures cover login, home, favorites, media library, all, movie, TV, and other pages. The current live server at `192.168.0.198:5666` is reachable on TCP port `5666`, but the in-app browser automation timed out while loading it. Implementation should use the saved captures as the visual baseline and use direct network/API scripts or APK screenshots for verification.
+The available 2026-05-13 captures cover login, home, favorites, media library, all, movie, TV, and other pages. The current live server at `192.168.0.198:5666` is reachable on TCP port `5666`, but the in-app browser automation timed out while loading it. Implementation should use the saved captures as the visual baseline, use direct REST/RPC calls for contract verification, and use APK screenshots for final visual verification.
 
 ## Phase B Scope: Visual Replica
 
@@ -38,6 +38,11 @@ Not included in the first visual pass:
 - Complete web filter drawer parity.
 - Full media detail page parity unless required to support the list-to-play path.
 - Server-side media library management parity. Local media library management remains the stable Android fallback until those APIs are fully confirmed.
+
+Phase B will ship in two implementation slices:
+
+1. B1 shell replica: home/list/favorites/search share the Feiniu-style dark shell, card sizing, focus behavior, toolbar chips, counts, and empty states.
+2. B2 media artwork: REST entries carry poster metadata, cards render poster images when safe, and image failures degrade to text cards without blocking navigation.
 
 ## Phase B Design
 
@@ -64,6 +69,14 @@ Match the Feiniu Video dark TV UI:
 
 The current app already has `FnosTheme`, `FnosSidebarIconView`, `FnosActionIconButton`, `NativeHomeView`, and `NativeFileBrowserView`. Phase B should extend these existing native patterns rather than introduce a new UI framework.
 
+Implementation boundaries:
+
+- `FnosFileEntry` remains the lightweight media item model, but gains poster metadata and helper accessors.
+- `FnosRestClient` is responsible for parsing poster paths and preserving REST fields that the native UI needs.
+- `NativeHomeView` owns the home composition only.
+- `NativeFileBrowserView` owns list/grid rendering, toolbar chips, empty state, and card focus behavior.
+- Poster loading lives in a small dedicated UI helper so list rendering is not coupled to network or bitmap cache details.
+
 ### Data Flow
 
 The visual replica should consume the current REST/RPC abstraction:
@@ -89,6 +102,8 @@ Add an Android 4-safe poster loader:
 
 WebP support varies on old Android versions. If a decoded WebP fails, show the text fallback rather than blocking list rendering.
 
+Image loading must be cancellable enough for recycled grid cards: before applying a decoded bitmap, verify the target view still represents the same entry. Cards should clear old images when recycled so stale poster art is never shown for a different movie.
+
 ### Remote Navigation
 
 Every visible command and card must be reachable by D-pad:
@@ -104,6 +119,8 @@ Focus must be visually obvious on both dark and poster backgrounds. Back behavio
 ## Phase C Scope: Playback Performance And E2E
 
 Phase C starts after the visual shell is stable.
+
+Phase C will be implemented after Phase B verification produces current screenshots. If Phase B exposes playback regressions, those regressions become Phase C inputs rather than being mixed into the visual patch.
 
 Included:
 
