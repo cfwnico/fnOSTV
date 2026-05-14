@@ -1,16 +1,22 @@
-package com.fnostv.android4;
+package com.fnostv.android4.config;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-final class Profile {
-    final String baseUrl;
-    final String username;
-    final String password;
-    final boolean autoLogin;
-    final boolean trustSslErrors;
+public final class ServerProfile {
+    public final int schemaVersion;
+    public final String baseUrl;
+    public final String username;
+    public final String password;
+    public final boolean autoLogin;
+    public final boolean trustSslErrors;
 
-    Profile(String baseUrl, String username, String password, boolean autoLogin, boolean trustSslErrors) {
+    public ServerProfile(String baseUrl, String username, String password, boolean autoLogin, boolean trustSslErrors) {
+        this(1, baseUrl, username, password, autoLogin, trustSslErrors);
+    }
+
+    private ServerProfile(int schemaVersion, String baseUrl, String username, String password, boolean autoLogin, boolean trustSslErrors) {
+        this.schemaVersion = schemaVersion;
         this.baseUrl = normalizeBaseUrl(baseUrl);
         this.username = username == null ? "" : username.trim();
         this.password = password == null ? "" : password;
@@ -18,12 +24,13 @@ final class Profile {
         this.trustSslErrors = trustSslErrors;
     }
 
-    boolean isReady() {
-        return baseUrl.length() > 0;
+    public boolean isReady() {
+        return ProfileValidator.validate(this).isValid();
     }
 
-    JSONObject toJson() throws JSONException {
+    public JSONObject toJson() throws JSONException {
         JSONObject object = new JSONObject();
+        object.put("schemaVersion", schemaVersion);
         object.put("baseUrl", baseUrl);
         object.put("username", username);
         object.put("password", password);
@@ -32,13 +39,14 @@ final class Profile {
         return object;
     }
 
-    static Profile fromJson(String value) {
+    public static ServerProfile fromJson(String value) {
         if (value == null || value.length() == 0) {
             return empty();
         }
         try {
             JSONObject object = new JSONObject(value);
-            return new Profile(
+            return new ServerProfile(
+                    object.optInt("schemaVersion", 1),
                     object.optString("baseUrl"),
                     object.optString("username"),
                     object.optString("password"),
@@ -49,8 +57,8 @@ final class Profile {
         }
     }
 
-    static Profile empty() {
-        return new Profile("", "", "", true, false);
+    public static ServerProfile empty() {
+        return new ServerProfile("", "", "", true, false);
     }
 
     private static String normalizeBaseUrl(String raw) {

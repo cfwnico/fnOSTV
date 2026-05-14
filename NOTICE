@@ -9,3 +9,15 @@ https://github.com/QiaoKes/fntv-electron
 This repository does not vendor Android SDK, Gradle, JDK, emulator system images,
 release signing keys, APK artifacts, or private service credentials. Local tools
 and generated files are kept out of source control through .gitignore.
+
+Playback compatibility uses IJKPlayer:
+https://github.com/bilibili/ijkplayer
+IJKPlayer is distributed under LGPL-2.1 and includes FFmpeg-based native
+playback components. Binary redistribution must preserve the corresponding
+third-party license notices.
+
+Playback compatibility also uses VLC for Android / LibVLC:
+https://github.com/videolan/vlc-android
+LibVLC is distributed under LGPL-2.1 or later. Binary redistribution must
+preserve the corresponding VLC/LibVLC license notices and allow recipients to
+exercise LGPL rights for the linked native playback components.

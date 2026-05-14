@@ -1,29 +1,64 @@
 package com.fnostv.android4;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.os.Bundle;
-import android.text.InputType;
-import android.view.Gravity;
 import android.view.KeyEvent;
-import android.view.View;
-import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.widget.Button;
-import android.widget.CheckBox;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.TextView;
+import android.widget.Spinner;
 import android.widget.Toast;
 
-public final class SettingsActivity extends Activity {
+import com.fnostv.android4.config.ProfileStore;
+import com.fnostv.android4.config.ProfileValidation;
+import com.fnostv.android4.config.ProfileValidator;
+import com.fnostv.android4.config.ServerProfile;
+import com.fnostv.android4.media.MediaIndexStore;
+import com.fnostv.android4.media.MediaLibrary;
+import com.fnostv.android4.media.MediaLibraryCategory;
+import com.fnostv.android4.media.MediaLibraryClassifier;
+import com.fnostv.android4.media.MediaLibraryScanner;
+import com.fnostv.android4.media.MediaLibraryStore;
+import com.fnostv.android4.net.FnosFileEntry;
+import com.fnostv.android4.net.FnosRestClient;
+import com.fnostv.android4.net.FnosRpcClient;
+import com.fnostv.android4.net.FnosRpcException;
+import com.fnostv.android4.net.FnosSession;
+import com.fnostv.android4.net.FnosSessionStore;
+import com.fnostv.android4.net.FnosSettingsSummary;
+import com.fnostv.android4.ui.NativeSettingsView;
+import com.fnostv.android4.ui.SettingsForm;
+import com.fnostv.android4.util.Constants;
+import com.fnostv.android4.util.Logger;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public final class SettingsActivity extends Activity implements SettingsForm.Listener, NativeSettingsView.Listener {
+    private static final String[] CATEGORY_LABELS = {"全部", "电影", "电视节目", "其他"};
+    private static final String[] CATEGORY_VALUES = {
+            MediaLibraryCategory.ALL,
+            MediaLibraryCategory.MOVIE,
+            MediaLibraryCategory.TV,
+            MediaLibraryCategory.OTHER
+    };
+
     private ProfileStore store;
-    private EditText urlInput;
-    private EditText usernameInput;
-    private EditText passwordInput;
-    private CheckBox autoLoginInput;
-    private CheckBox trustSslInput;
+    private FnosSessionStore sessionStore;
+    private MediaLibraryStore mediaLibraryStore;
+    private MediaIndexStore mediaIndexStore;
+    private SettingsForm settingsForm;
+    private NativeSettingsView nativeSettingsView;
+    private FnosSettingsSummary settingsSummary = FnosSettingsSummary.empty();
+    private boolean accountEditorOpen;
+    private boolean scanning;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,170 +66,350 @@ public final class SettingsActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         store = new ProfileStore(this);
-        buildLayout(store.load());
+        sessionStore = new FnosSessionStore(this);
+        mediaLibraryStore = new MediaLibraryStore(this);
+        mediaIndexStore = new MediaIndexStore(this);
+        settingsForm = new SettingsForm(this, this);
+        nativeSettingsView = new NativeSettingsView(this, this);
+        nativeSettingsView.setInitialPage(getIntent().getStringExtra(Constants.EXTRA_SETTINGS_PAGE));
+
+        String error = getIntent().getStringExtra(Constants.EXTRA_SETTINGS_ERROR_MESSAGE);
+        if (error != null || !store.load().isReady()) {
+            showAccountEditor(error);
+        } else {
+            showNativeSettings("管理本地媒体库，扫描后首页和分类页会使用本地索引。");
+        }
     }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            setResult(RESULT_CANCELED);
-            finish();
+            onCancelRequested();
             return true;
         }
         return super.onKeyDown(keyCode, event);
     }
 
-    private void buildLayout(Profile profile) {
-        ScrollView scrollView = new ScrollView(this);
-        scrollView.setFillViewport(true);
-        scrollView.setBackgroundColor(0xFF101820);
-
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(48), dp(32), dp(48), dp(32));
-        scrollView.addView(panel, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView title = new TextView(this);
-        title.setText("fnOSTV 服务器设置");
-        title.setTextColor(0xFFFFFFFF);
-        title.setTextSize(28);
-        title.setGravity(Gravity.LEFT);
-        panel.addView(title, rowParams());
-
-        TextView hint = new TextView(this);
-        hint.setText("填写飞牛影视 Web 地址；遥控器菜单键可随时回到这里。");
-        hint.setTextColor(0xFFB6C2C0);
-        hint.setTextSize(16);
-        panel.addView(hint, rowParams());
-
-        urlInput = input("服务器地址，例如 http://192.168.1.20:5666", false);
-        urlInput.setText(profile.baseUrl);
-        panel.addView(label("服务器地址"));
-        panel.addView(urlInput, rowParams());
-
-        usernameInput = input("用户名/账号", false);
-        usernameInput.setText(profile.username);
-        panel.addView(label("账号"));
-        panel.addView(usernameInput, rowParams());
-
-        passwordInput = input("密码", true);
-        passwordInput.setText(profile.password);
-        panel.addView(label("密码"));
-        panel.addView(passwordInput, rowParams());
-
-        autoLoginInput = checkbox("自动尝试登录", profile.autoLogin);
-        panel.addView(autoLoginInput, rowParams());
-
-        trustSslInput = checkbox("信任该服务器的 SSL 证书异常", profile.trustSslErrors);
-        panel.addView(trustSslInput, rowParams());
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.RIGHT);
-        panel.addView(actions, rowParams());
-
-        Button cancel = button("取消");
-        cancel.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                setResult(RESULT_CANCELED);
-                finish();
-            }
-        });
-        actions.addView(cancel, buttonParams());
-
-        Button save = button("保存并进入");
-        save.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                saveProfile();
-            }
-        });
-        actions.addView(save, buttonParams());
-
-        setContentView(scrollView);
-    }
-
-    private void saveProfile() {
-        Profile profile = new Profile(
-                urlInput.getText().toString(),
-                usernameInput.getText().toString(),
-                passwordInput.getText().toString(),
-                autoLoginInput.isChecked(),
-                trustSslInput.isChecked());
-        if (!profile.isReady()) {
-            Toast.makeText(this, "请填写服务器地址", Toast.LENGTH_SHORT).show();
-            urlInput.requestFocus();
+    @Override
+    public void onSaveRequested(ServerProfile profile) {
+        ProfileValidation validation = ProfileValidator.validate(profile);
+        if (!validation.isValid()) {
+            Toast.makeText(this, validation.getMessage(), Toast.LENGTH_SHORT).show();
+            settingsForm.focusServerUrl();
             return;
         }
         store.save(profile);
+        if (accountEditorOpen && profile.isReady()) {
+            accountEditorOpen = false;
+            showNativeSettings("账号连接已保存。");
+            return;
+        }
         setResult(RESULT_OK);
         finish();
     }
 
-    private TextView label(String text) {
-        TextView label = new TextView(this);
-        label.setText(text);
-        label.setTextColor(0xFFDDE6E3);
-        label.setTextSize(15);
-        label.setPadding(0, dp(12), 0, dp(4));
-        return label;
-    }
-
-    private EditText input(String hint, boolean password) {
-        EditText input = new EditText(this);
-        input.setSingleLine(true);
-        input.setHint(hint);
-        input.setHintTextColor(0xFF77827F);
-        input.setTextColor(0xFFFFFFFF);
-        input.setTextSize(18);
-        input.setSelectAllOnFocus(true);
-        input.setPadding(dp(12), 0, dp(12), 0);
-        input.setBackgroundColor(0xFF1D2A2B);
-        if (password) {
-            input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        } else {
-            input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+    @Override
+    public void onCancelRequested() {
+        if (accountEditorOpen && store.load().isReady()) {
+            accountEditorOpen = false;
+            showNativeSettings("");
+            return;
         }
-        return input;
+        setResult(RESULT_CANCELED);
+        finish();
     }
 
-    private CheckBox checkbox(String text, boolean checked) {
-        CheckBox checkBox = new CheckBox(this);
-        checkBox.setText(text);
-        checkBox.setTextColor(0xFFFFFFFF);
-        checkBox.setTextSize(16);
-        checkBox.setChecked(checked);
-        return checkBox;
+    @Override
+    public void onCloseSettings() {
+        setResult(RESULT_OK);
+        finish();
     }
 
-    private Button button(String text) {
-        Button button = new Button(this);
-        button.setText(text);
-        button.setTextSize(16);
-        button.setMinWidth(dp(128));
-        return button;
+    @Override
+    public void onEditAccount() {
+        showAccountEditor(null);
     }
 
-    private LinearLayout.LayoutParams rowParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.bottomMargin = dp(8);
-        return params;
+    @Override
+    public void onAddLibrary() {
+        showLibraryEditor(null);
     }
 
-    private LinearLayout.LayoutParams buttonParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                dp(48));
-        params.leftMargin = dp(12);
-        return params;
+    @Override
+    public void onEditLibrary(MediaLibrary library) {
+        showLibraryEditor(library);
+    }
+
+    @Override
+    public void onDeleteLibrary(final MediaLibrary library) {
+        if (library == null) {
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("删除媒体库")
+                .setMessage("确定删除“" + library.name + "”？本地索引会在下次扫描后刷新。")
+                .setPositiveButton("删除", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        mediaLibraryStore.delete(library.id);
+                        refreshNativeSettings("已删除媒体库：" + library.name);
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    @Override
+    public void onScanLibraries() {
+        if (scanning) {
+            return;
+        }
+        final List<MediaLibrary> libraries = mediaLibraryStore.listOrSeedDefault();
+        if (!hasScanPath(libraries)) {
+            Toast.makeText(this, "请先为媒体库添加至少一个目录路径", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        scanning = true;
+        refreshNativeSettings("正在扫描媒体库...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final ScanResult result = scanLibraries(libraries);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        scanning = false;
+                        if (result.success) {
+                            refreshNativeSettings("扫描完成，共索引 " + result.count + " 个视频。");
+                        } else {
+                            refreshNativeSettings(result.message);
+                        }
+                    }
+                });
+            }
+        }, "fnos-media-library-scan").start();
+    }
+
+    @Override
+    public void onSettingsAction(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    private void showAccountEditor(String errorMessage) {
+        accountEditorOpen = true;
+        setContentView(settingsForm.create(store.load(), errorMessage));
+    }
+
+    private void showNativeSettings(String status) {
+        accountEditorOpen = false;
+        setContentView(nativeSettingsView.create(mediaLibraryStore.listOrSeedDefault(), status, settingsSummary));
+        loadSettingsSummary();
+    }
+
+    private void refreshNativeSettings(String status) {
+        nativeSettingsView.refresh(mediaLibraryStore.listOrSeedDefault(), status, settingsSummary);
+    }
+
+    private void loadSettingsSummary() {
+        final ServerProfile profile = store.load();
+        if (!profile.isReady()) {
+            return;
+        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    FnosRestClient client = new FnosRestClient(profile);
+                    JSONObject userInfo = client.userInfo();
+                    JSONObject config = client.systemConfig();
+                    JSONObject version = client.version();
+                    JSONObject server = client.serverInfo();
+                    JSONArray users = client.managerUsers();
+                    JSONArray tasks = client.taskSchedules();
+                    JSONArray gpu = client.gpuList();
+                    final FnosSettingsSummary loaded = FnosSettingsSummary.fromResponses(
+                            userInfo,
+                            config,
+                            version,
+                            server,
+                            users,
+                            tasks,
+                            gpu);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            settingsSummary = loaded;
+                            refreshNativeSettings("");
+                        }
+                    });
+                } catch (FnosRpcException ex) {
+                    Logger.w("Settings summary load failed: " + ex.getMessage());
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            refreshNativeSettings("设置详情同步失败，请检查登录状态。");
+                        }
+                    });
+                } catch (RuntimeException ex) {
+                    Logger.w("Settings summary crashed: " + ex.getMessage());
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            refreshNativeSettings("设置详情同步异常。");
+                        }
+                    });
+                }
+            }
+        }, "fnos-settings-summary").start();
+    }
+
+    private void showLibraryEditor(final MediaLibrary existing) {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(18);
+        form.setPadding(padding, padding, padding, 0);
+
+        final EditText nameInput = new EditText(this);
+        nameInput.setSingleLine(true);
+        nameInput.setHint("媒体库名称，例如 影视大全");
+        nameInput.setText(existing == null ? "" : existing.name);
+        form.addView(nameInput);
+
+        final Spinner categoryInput = new Spinner(this);
+        categoryInput.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, CATEGORY_LABELS));
+        categoryInput.setSelection(categoryIndex(existing == null ? MediaLibraryCategory.ALL : existing.category));
+        form.addView(categoryInput);
+
+        final EditText pathsInput = new EditText(this);
+        pathsInput.setMinLines(3);
+        pathsInput.setHint("目录路径，每行一个，例如 /video/Movies");
+        pathsInput.setText(existing == null ? "" : joinPaths(existing.paths));
+        form.addView(pathsInput);
+
+        new AlertDialog.Builder(this)
+                .setTitle(existing == null ? "添加媒体库" : "编辑媒体库")
+                .setView(form)
+                .setPositiveButton("保存", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        List<String> paths = parsePaths(pathsInput.getText().toString());
+                        if (paths.size() == 0) {
+                            Toast.makeText(SettingsActivity.this, "请填写至少一个目录路径", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        String id = existing == null ? MediaLibraryStore.newId() : existing.id;
+                        int order = existing == null ? mediaLibraryStore.list().size() : existing.sortOrder;
+                        MediaLibrary library = new MediaLibrary(
+                                id,
+                                nameInput.getText().toString(),
+                                CATEGORY_VALUES[categoryInput.getSelectedItemPosition()],
+                                paths,
+                                true,
+                                order,
+                                existing == null ? 0L : existing.updatedAt);
+                        mediaLibraryStore.upsert(library);
+                        refreshNativeSettings("已保存媒体库：" + library.name);
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private ScanResult scanLibraries(List<MediaLibrary> libraries) {
+        try {
+            ServerProfile profile = store.load();
+            FnosSession session = sessionStore.load();
+            if (!profile.isReady() || !session.hasToken()) {
+                return ScanResult.failure("登录会话已失效，请返回重新登录后再扫描。");
+            }
+            FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+            MediaLibraryScanner scanner = new MediaLibraryScanner(client, session);
+            List<FnosFileEntry> entries = scanner.scan(libraries);
+            mediaIndexStore.replaceAll(entries);
+            markLibrariesScanned(libraries);
+            return ScanResult.success(entries.size());
+        } catch (FnosRpcException ex) {
+            Logger.w("Media library scan failed: " + ex.getMessage());
+            return ScanResult.failure("媒体库扫描失败：" + ex.getMessage());
+        } catch (RuntimeException ex) {
+            Logger.w("Media library scan crashed: " + ex.getMessage());
+            return ScanResult.failure("媒体库扫描异常：" + ex.getMessage());
+        }
+    }
+
+    private void markLibrariesScanned(List<MediaLibrary> libraries) {
+        List<MediaLibrary> updated = new ArrayList<MediaLibrary>();
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < libraries.size(); i++) {
+            MediaLibrary library = libraries.get(i);
+            updated.add(library.enabled ? library.withUpdatedAt(now) : library);
+        }
+        mediaLibraryStore.saveAll(updated);
+    }
+
+    private boolean hasScanPath(List<MediaLibrary> libraries) {
+        for (int i = 0; i < libraries.size(); i++) {
+            if (libraries.get(i).enabled && libraries.get(i).paths.size() > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int categoryIndex(String category) {
+        String value = MediaLibraryCategory.normalize(category);
+        for (int i = 0; i < CATEGORY_VALUES.length; i++) {
+            if (CATEGORY_VALUES[i].equals(value)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    private List<String> parsePaths(String raw) {
+        List<String> paths = new ArrayList<String>();
+        String[] parts = raw == null ? new String[0] : raw.split("[,\\r\\n]+");
+        for (int i = 0; i < parts.length; i++) {
+            String value = MediaLibraryClassifier.normalizePath(parts[i]);
+            if (value.length() > 0 && !paths.contains(value)) {
+                paths.add(value);
+            }
+        }
+        return paths;
+    }
+
+    private String joinPaths(List<String> paths) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < paths.size(); i++) {
+            if (builder.length() > 0) {
+                builder.append('\n');
+            }
+            builder.append(paths.get(i));
+        }
+        return builder.toString();
     }
 
     private int dp(int value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private static final class ScanResult {
+        final boolean success;
+        final int count;
+        final String message;
+
+        private ScanResult(boolean success, int count, String message) {
+            this.success = success;
+            this.count = count;
+            this.message = message;
+        }
+
+        static ScanResult success(int count) {
+            return new ScanResult(true, count, "");
+        }
+
+        static ScanResult failure(String message) {
+            return new ScanResult(false, 0, message);
+        }
     }
 }
