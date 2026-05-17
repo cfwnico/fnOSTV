@@ -28,6 +28,8 @@ import android.widget.Toast;
 import com.fnostv.android4.config.ProfileStore;
 import com.fnostv.android4.config.ServerProfile;
 import com.fnostv.android4.media.MediaIndexStore;
+import com.fnostv.android4.media.MediaCenterGateway;
+import com.fnostv.android4.media.MediaCenterLoad;
 import com.fnostv.android4.media.MediaLibraryClassifier;
 import com.fnostv.android4.media.MediaLibraryStore;
 import com.fnostv.android4.net.FavoriteStore;
@@ -43,7 +45,6 @@ import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.net.RecentPlaybackStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
-import com.fnostv.android4.ui.FileBrowserLabels;
 import com.fnostv.android4.ui.HomePosterSlots;
 import com.fnostv.android4.ui.MediaDetailState;
 import com.fnostv.android4.ui.NativeFileBrowserView;
@@ -716,61 +717,57 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     private MediaLoadResult loadMediaCenter(String path) {
-        if (path == null || path.length() == 0) {
-            try {
-                FnosRestClient client = newRestClient();
-                FnosFileList libraries = client.mediaLibraries();
-                if (libraries.entries.size() > 0) {
-                    FnosFileEntry first = libraries.entries.get(0);
-                    FnosFileList list = client.mediaItems(first.path, NativeHomeView.ACTION_ALL, 50);
-                    return MediaLoadResult.success(first.name.length() == 0 ? "影视大全" : first.name, "fnOS 影视媒体库", list, false);
-                }
-                FnosFileList list = client.mediaItems("", NativeHomeView.ACTION_ALL, 50);
-                if (list.entries.size() > 0) {
-                    return MediaLoadResult.success("影视大全", "fnOS 影视条目", list, false);
-                }
-            } catch (FnosRpcException ex) {
-                Logger.w("Media center REST API unavailable: " + ex.getMessage());
-            } catch (RuntimeException ex) {
-                Logger.w("Media center REST API crashed: " + ex.getMessage());
-            }
-            List<FnosFileEntry> indexed = mediaIndexStore.list();
-            if (indexed.size() > 0) {
-                return MediaLoadResult.success("影视大全", "本地媒体库索引", new FnosFileList("mediaIndex", indexed), true);
-            }
-            try {
-                FnosSession session = sessionStore.load();
-                if (session.hasToken()) {
-                    FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-                    FnosFileList list = client.mediaCenterEntries(session);
-                    if (list.entries.size() > 0) {
-                        return MediaLoadResult.success("影视中心", "fnOS mediaCenter", list, false);
+        MediaCenterLoad result = newMediaCenterGateway().load(path);
+        if (result.success) {
+            Logger.d("Media center loaded source=" + result.source
+                    + " title=" + result.title
+                    + " count=" + (result.list == null ? 0 : result.list.entries.size()));
+            return MediaLoadResult.success(result.title, result.subtitle, result.list, result.sortEntries);
+        }
+        Logger.w("Media center load failed: " + result.message);
+        return MediaLoadResult.failure(result.message);
+    }
+
+    private MediaCenterGateway newMediaCenterGateway() {
+        return new MediaCenterGateway(
+                new MediaCenterGateway.RestProvider() {
+                    @Override
+                    public FnosFileList libraries() throws FnosRpcException {
+                        return newRestClient().mediaLibraries();
                     }
-                }
-            } catch (FnosRpcException ex) {
-                Logger.w("Media center native API unavailable: " + ex.getMessage());
-            } catch (RuntimeException ex) {
-                Logger.w("Media center native API crashed: " + ex.getMessage());
-            }
-        } else if (isRestMediaPath(path)) {
-            try {
-                FnosFileList list = newRestClient().mediaItems(path, NativeHomeView.ACTION_ALL, 50);
-                return MediaLoadResult.success("影视大全", path, list, false);
-            } catch (FnosRpcException ex) {
-                Logger.w("Media center REST child unavailable: " + ex.getMessage());
-            } catch (RuntimeException ex) {
-                Logger.w("Media center REST child crashed: " + ex.getMessage());
-            }
-        }
-        FileLoadResult fallback = loadFileList(path);
-        if (fallback.success) {
-            return MediaLoadResult.success(
-                    FileBrowserLabels.mediaFallbackTitle(),
-                    FileBrowserLabels.mediaFallbackSubtitle(path),
-                    fallback.list,
-                    true);
-        }
-        return MediaLoadResult.failure(fallback.message);
+
+                    @Override
+                    public FnosFileList items(String path, String category, int pageSize) throws FnosRpcException {
+                        return newRestClient().mediaItems(path, category, pageSize);
+                    }
+                },
+                new MediaCenterGateway.LocalIndexProvider() {
+                    @Override
+                    public List<FnosFileEntry> entries() {
+                        return mediaIndexStore.list();
+                    }
+                },
+                new MediaCenterGateway.RpcProvider() {
+                    @Override
+                    public FnosFileList entries() throws FnosRpcException {
+                        FnosSession session = sessionStore.load();
+                        if (!session.hasToken()) {
+                            throw new FnosRpcException("登录会话已失效");
+                        }
+                        FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
+                        return client.mediaCenterEntries(session);
+                    }
+                },
+                new MediaCenterGateway.FileProvider() {
+                    @Override
+                    public FnosFileList files(String path) throws FnosRpcException {
+                        FileLoadResult fallback = loadFileList(path);
+                        if (fallback.success) {
+                            return fallback.list;
+                        }
+                        throw new FnosRpcException(fallback.message);
+                    }
+                });
     }
 
     private MediaLoadResult loadCategory(String title, String category) {
@@ -834,13 +831,6 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             throw new FnosRpcException("服务配置不可用");
         }
         return new FnosRestClient(profile);
-    }
-
-    private boolean isRestMediaPath(String path) {
-        if (path == null || path.length() == 0) {
-            return false;
-        }
-        return path.indexOf('/') < 0 && path.indexOf('\\') < 0 && path.indexOf(':') < 0;
     }
 
     private void updateHomeCounts() {
