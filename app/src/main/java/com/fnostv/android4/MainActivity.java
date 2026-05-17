@@ -44,6 +44,7 @@ import com.fnostv.android4.net.FnosSession;
 import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.net.MediaDetailInfo;
 import com.fnostv.android4.net.RecentPlaybackStore;
+import com.fnostv.android4.tv.BackNavigationState;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
 import com.fnostv.android4.ui.HomePosterSlots;
@@ -176,6 +177,13 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!goBack()) {
+            super.onBackPressed();
+        }
     }
 
     private void buildLayout() {
@@ -511,19 +519,25 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     @Override
     public boolean goBack() {
-        if (nativeVideoPlayerView.isVisible()) {
+        BackNavigationState state = BackNavigationState.choose(
+                nativeVideoPlayerView.isVisible(),
+                mediaDetailView.isVisible(),
+                fullscreenVideoController.isShowing(),
+                fileBrowserView.isVisible(),
+                webView.canGoBack());
+        if (state == BackNavigationState.PLAYER) {
             nativeVideoPlayerView.hide();
             return true;
         }
-        if (mediaDetailView.isVisible()) {
+        if (state == BackNavigationState.DETAIL) {
             closeMediaDetail();
             return true;
         }
-        if (fullscreenVideoController.isShowing()) {
+        if (state == BackNavigationState.FULLSCREEN) {
             fullscreenVideoController.hide();
             return true;
         }
-        if (fileBrowserView.isVisible()) {
+        if (state == BackNavigationState.BROWSER) {
             if (browserMode == BROWSER_MODE_FAVORITES || browserMode == BROWSER_MODE_CATEGORY) {
                 showNativeHome();
                 return true;
@@ -547,7 +561,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             }
             return true;
         }
-        if (webView.canGoBack()) {
+        if (state == BackNavigationState.WEB) {
             webView.goBack();
             return true;
         }
