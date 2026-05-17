@@ -31,6 +31,7 @@ import com.fnostv.android4.net.FnosSession;
 import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.net.FnosSettingsSummary;
 import com.fnostv.android4.ui.NativeSettingsView;
+import com.fnostv.android4.ui.SettingsCompletionFlow;
 import com.fnostv.android4.ui.SettingsForm;
 import com.fnostv.android4.util.Constants;
 import com.fnostv.android4.util.Logger;
@@ -58,6 +59,7 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
     private NativeSettingsView nativeSettingsView;
     private FnosSettingsSummary settingsSummary = FnosSettingsSummary.empty();
     private boolean accountEditorOpen;
+    private boolean firstConfiguration;
     private boolean scanning;
 
     @Override
@@ -74,7 +76,8 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
         nativeSettingsView.setInitialPage(getIntent().getStringExtra(Constants.EXTRA_SETTINGS_PAGE));
 
         String error = getIntent().getStringExtra(Constants.EXTRA_SETTINGS_ERROR_MESSAGE);
-        if (error != null || !store.load().isReady()) {
+        firstConfiguration = !store.load().isReady();
+        if (error != null || firstConfiguration) {
             showAccountEditor(error);
         } else {
             showNativeSettings("管理本地媒体库，扫描后首页和分类页会使用本地索引。");
@@ -99,7 +102,13 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
             return;
         }
         store.save(profile);
-        if (accountEditorOpen && profile.isReady()) {
+        int action = SettingsCompletionFlow.afterAccountSave(firstConfiguration, accountEditorOpen, profile.isReady());
+        if (action == SettingsCompletionFlow.ACTION_FINISH) {
+            setResult(RESULT_OK);
+            finish();
+            return;
+        }
+        if (action == SettingsCompletionFlow.ACTION_SHOW_NATIVE_SETTINGS) {
             accountEditorOpen = false;
             showNativeSettings("账号连接已保存。");
             return;
