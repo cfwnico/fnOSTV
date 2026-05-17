@@ -12,6 +12,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.fnostv.android4.net.FnosFileEntry;
+import com.fnostv.android4.net.MediaDetailInfo;
 
 public final class NativeMediaDetailView {
     public interface Listener {
@@ -33,6 +34,9 @@ public final class NativeMediaDetailView {
     private TextView posterFallback;
     private TextView titleView;
     private TextView metaView;
+    private TextView overviewView;
+    private TextView childrenView;
+    private TextView detailStatusView;
     private TextView pathView;
     private TextView statusView;
     private TextView sourceView;
@@ -143,6 +147,16 @@ public final class NativeMediaDetailView {
         metaView = label("", 15, FnosTheme.COLOR_TEXT_MUTED);
         panel.addView(metaView, rowParams(0, 10));
 
+        overviewView = label("", 15, FnosTheme.COLOR_TEXT);
+        overviewView.setSingleLine(false);
+        panel.addView(overviewView, rowParams(0, 10));
+
+        childrenView = label("", 14, FnosTheme.COLOR_TEXT_MUTED);
+        panel.addView(childrenView, rowParams(0, 10));
+
+        detailStatusView = label("", 13, FnosTheme.COLOR_TEXT_DIM);
+        panel.addView(detailStatusView, rowParams(0, 10));
+
         pathView = label("", 13, FnosTheme.COLOR_TEXT_DIM);
         pathView.setSingleLine(false);
         panel.addView(pathView, rowParams(0, 24));
@@ -197,8 +211,16 @@ public final class NativeMediaDetailView {
             return;
         }
         FnosFileEntry entry = state.entry;
-        titleView.setText(entry.name.length() == 0 ? "未命名视频" : entry.name);
-        metaView.setText(entry.formatLabel() + " · " + sizeLabel(entry.size) + " · " + (state.favorite ? "已收藏" : "未收藏"));
+        MediaDetailInfo info = state.detailInfo == null ? MediaDetailInfo.empty() : state.detailInfo;
+        String title = info.title.length() > 0 ? info.title : entry.name;
+        titleView.setText(title.length() == 0 ? "未命名视频" : title);
+        metaView.setText(metaText(entry, info));
+        overviewView.setText(info.overview);
+        overviewView.setVisibility(info.overview.length() > 0 ? View.VISIBLE : View.GONE);
+        childrenView.setText(childrenText(state.detailChildren().size()));
+        childrenView.setVisibility(state.detailChildren().size() > 0 ? View.VISIBLE : View.GONE);
+        detailStatusView.setText(detailStatusText(info));
+        detailStatusView.setVisibility(detailStatusView.getText().length() > 0 ? View.VISIBLE : View.GONE);
         pathView.setText(entry.path);
         sourceView.setText("播放源 " + state.sourceLabel());
         statusView.setText(statusText());
@@ -207,6 +229,46 @@ public final class NativeMediaDetailView {
         sourceButton.setText(state.sources().size() > 1 ? "播放源" : "单源");
         posterFallback.setText(FileBrowserLabels.posterPlaceholder(entry, state.favorite));
         posterLoader.load(posterBaseUrl, entry, posterFrame, posterImage, posterFallback);
+    }
+
+    private String metaText(FnosFileEntry entry, MediaDetailInfo info) {
+        StringBuilder builder = new StringBuilder();
+        appendPart(builder, info.year);
+        appendPart(builder, info.rating.length() > 0 ? "评分 " + info.rating : "");
+        appendPart(builder, info.category);
+        appendPart(builder, info.durationLabel);
+        appendPart(builder, info.sourceLabel);
+        appendPart(builder, entry.formatLabel());
+        appendPart(builder, sizeLabel(entry.size));
+        appendPart(builder, state.favorite ? "已收藏" : "未收藏");
+        return builder.toString();
+    }
+
+    private String childrenText(int count) {
+        return count > 0 ? "剧集/版本 " + count + " 项" : "";
+    }
+
+    private String detailStatusText(MediaDetailInfo info) {
+        if (state.loadingDetail) {
+            return "详情加载中";
+        }
+        if (state.detailError.length() > 0) {
+            return state.detailError;
+        }
+        if (!info.isEmpty()) {
+            return "详情信息已同步";
+        }
+        return "";
+    }
+
+    private void appendPart(StringBuilder builder, String value) {
+        if (value == null || value.length() == 0) {
+            return;
+        }
+        if (builder.length() > 0) {
+            builder.append(" · ");
+        }
+        builder.append(value);
     }
 
     private String statusText() {

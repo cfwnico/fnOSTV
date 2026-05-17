@@ -2,6 +2,7 @@ package com.fnostv.android4.ui;
 
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosPlaybackSource;
+import com.fnostv.android4.net.MediaDetailInfo;
 import com.fnostv.android4.player.PlaybackSourceSelector;
 
 import java.util.ArrayList;
@@ -11,7 +12,10 @@ public final class MediaDetailState {
     public final FnosFileEntry entry;
     public boolean favorite;
     public boolean loadingSources;
+    public boolean loadingDetail;
     public String errorMessage = "";
+    public String detailError = "";
+    public MediaDetailInfo detailInfo = MediaDetailInfo.empty();
     private final List<FnosPlaybackSource> sources = new ArrayList<FnosPlaybackSource>();
     private int selectedSourceIndex;
 
@@ -30,6 +34,28 @@ public final class MediaDetailState {
     public void setError(String errorMessage) {
         this.loadingSources = false;
         this.errorMessage = errorMessage == null ? "" : errorMessage;
+    }
+
+    public void setLoadingDetail(boolean loadingDetail) {
+        this.loadingDetail = loadingDetail;
+        if (loadingDetail) {
+            detailError = "";
+        }
+    }
+
+    public void setDetailInfo(MediaDetailInfo detailInfo) {
+        this.detailInfo = detailInfo == null ? MediaDetailInfo.empty() : detailInfo;
+        loadingDetail = false;
+        detailError = "";
+    }
+
+    public void setDetailError(String detailError) {
+        this.loadingDetail = false;
+        this.detailError = detailError == null ? "" : detailError;
+    }
+
+    public List<FnosFileEntry> detailChildren() {
+        return new ArrayList<FnosFileEntry>(detailInfo.children);
     }
 
     public void setSources(List<FnosPlaybackSource> resolvedSources) {

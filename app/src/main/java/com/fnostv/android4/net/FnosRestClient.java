@@ -7,6 +7,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -57,6 +59,14 @@ public final class FnosRestClient {
         } catch (JSONException ex) {
             throw new FnosRpcException("解析影视条目失败", ex);
         }
+    }
+
+    public MediaDetailInfo mediaDetail(String guid) throws FnosRpcException {
+        String path = mediaDetailPath(guid);
+        if (path.length() == 0) {
+            return MediaDetailInfo.empty();
+        }
+        return MediaDetailInfoParser.parse(get(path));
     }
 
     public FnosFileList favoriteItems() throws FnosRpcException {
@@ -133,6 +143,14 @@ public final class FnosRestClient {
         body.put("page", 1);
         body.put("page_size", Math.max(1, pageSize));
         return body.toString();
+    }
+
+    public static String mediaDetailPath(String guid) {
+        String value = guid == null ? "" : guid.trim();
+        if (value.length() == 0) {
+            return "";
+        }
+        return "/item/detail?guid=" + encodeQueryValue(value);
     }
 
     public static FnosMediaCounts parseMediaCounts(JSONObject response) throws JSONException {
@@ -483,5 +501,13 @@ public final class FnosRestClient {
 
     private static String firstNonEmpty(String first, String second, String third, String fourth, String fifth) {
         return firstNonEmpty(firstNonEmpty(first, second, third, fourth), fifth);
+    }
+
+    private static String encodeQueryValue(String value) {
+        try {
+            return URLEncoder.encode(value, "UTF-8").replace("+", "%20");
+        } catch (UnsupportedEncodingException ex) {
+            return value;
+        }
     }
 }

@@ -42,6 +42,7 @@ import com.fnostv.android4.net.FnosRpcClient;
 import com.fnostv.android4.net.FnosRpcException;
 import com.fnostv.android4.net.FnosSession;
 import com.fnostv.android4.net.FnosSessionStore;
+import com.fnostv.android4.net.MediaDetailInfo;
 import com.fnostv.android4.net.RecentPlaybackStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
@@ -982,6 +983,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         statusOverlay.hide();
         mediaDetailState = new MediaDetailState(entry, favoriteStore.isFavorite(entry));
         mediaDetailView.show(mediaDetailState, profile == null ? "" : profile.baseUrl);
+        if (canResolveDetailInfo(entry)) {
+            resolveDetailInfo(entry);
+        }
         String url = entry.playbackUrl();
         if (url.length() > 0) {
             List<FnosPlaybackSource> direct = new ArrayList<FnosPlaybackSource>();
@@ -998,6 +1002,56 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             mediaDetailView.hide();
         }
         mediaDetailState = null;
+    }
+
+    private boolean canResolveDetailInfo(FnosFileEntry entry) {
+        if (entry == null || entry.path.length() == 0) {
+            return false;
+        }
+        String path = entry.path.toLowerCase();
+        return path.indexOf("/") < 0
+                && !path.startsWith("http://")
+                && !path.startsWith("https://");
+    }
+
+    private void resolveDetailInfo(final FnosFileEntry entry) {
+        if (mediaDetailState == null || mediaDetailState.entry != entry) {
+            return;
+        }
+        mediaDetailState.setLoadingDetail(true);
+        mediaDetailView.update(mediaDetailState);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                MediaDetailInfo loaded = null;
+                String error = "";
+                try {
+                    loaded = newRestClient().mediaDetail(entry.path);
+                } catch (FnosRpcException ex) {
+                    Logger.w("Media detail metadata failed: " + ex.getMessage());
+                    error = "详情信息暂不可用";
+                } catch (RuntimeException ex) {
+                    Logger.w("Media detail metadata crashed: " + ex.getMessage());
+                    error = "详情信息暂不可用";
+                }
+                final MediaDetailInfo result = loaded;
+                final String message = error;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (mediaDetailState == null || mediaDetailState.entry != entry) {
+                            return;
+                        }
+                        if (result != null) {
+                            mediaDetailState.setDetailInfo(result);
+                        } else {
+                            mediaDetailState.setDetailError(message);
+                        }
+                        mediaDetailView.update(mediaDetailState);
+                    }
+                });
+            }
+        }, "fnos-detail-metadata").start();
     }
 
     private void resolveDetailSources(final FnosFileEntry entry) {

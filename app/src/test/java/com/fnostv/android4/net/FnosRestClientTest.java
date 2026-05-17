@@ -10,6 +10,7 @@ public final class FnosRestClientTest {
         parsesRestItemsIntoNativeBrowserEntries();
         parsesPosterMetadataFromRestItems();
         buildsPosterImageUrlFromServerPath();
+        buildsMediaDetailPath();
         parsesSettingsSummaryForNativeSettings();
     }
 
@@ -91,6 +92,12 @@ public final class FnosRestClientTest {
         assertEquals(
                 "https://cdn.example/poster.webp",
                 FnosRestClient.posterImageUrl("http://192.168.0.198:5666", "https://cdn.example/poster.webp", 400));
+    }
+
+    private static void buildsMediaDetailPath() {
+        assertEquals("/item/detail?guid=abc", FnosRestClient.mediaDetailPath("abc"));
+        assertEquals("/item/detail?guid=abc%20123", FnosRestClient.mediaDetailPath("abc 123"));
+        assertEquals("", FnosRestClient.mediaDetailPath(""));
     }
 
     private static void parsesSettingsSummaryForNativeSettings() throws Exception {

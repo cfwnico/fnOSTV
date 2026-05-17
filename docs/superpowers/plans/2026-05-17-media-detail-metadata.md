@@ -17,7 +17,7 @@
 - Create: `app/src/main/java/com/fnostv/android4/net/MediaDetailInfoParser.java`
 - Create: `app/src/test/java/com/fnostv/android4/net/MediaDetailInfoParserTest.java`
 
-- [ ] **Step 1: Write failing parser tests**
+- [x] **Step 1: Write failing parser tests**
 
 Create `MediaDetailInfoParserTest` with tests for:
 
@@ -38,21 +38,21 @@ assertEquals("45:30", info.durationLabel);
 assertEquals(2, info.children.size());
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
 Expected: FAIL because `MediaDetailInfo` and `MediaDetailInfoParser` do not exist.
 
-- [ ] **Step 3: Implement `MediaDetailInfo`**
+- [x] **Step 3: Implement `MediaDetailInfo`**
 
 Create immutable fields for title, subtitle, overview, year, rating, category, durationLabel, sourceLabel, and children. Add a static `empty()` factory.
 
-- [ ] **Step 4: Implement `MediaDetailInfoParser`**
+- [x] **Step 4: Implement `MediaDetailInfoParser`**
 
 Parse `JSONObject` defensively from `data`, `data.item`, `data.detail`, or the root object. Use first-non-empty helpers and parse child arrays named `children`, `episodes`, `seasons`, `versions`, `sources`, or `list`.
 
-- [ ] **Step 5: Run green test**
+- [x] **Step 5: Run green test**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
@@ -64,7 +64,7 @@ Expected: PASS.
 - Modify: `app/src/main/java/com/fnostv/android4/ui/MediaDetailState.java`
 - Modify: `app/src/test/java/com/fnostv/android4/ui/MediaDetailStateTest.java`
 
-- [ ] **Step 1: Write failing state tests**
+- [x] **Step 1: Write failing state tests**
 
 Add tests that verify:
 
@@ -79,17 +79,17 @@ assertEquals(2, state.detailChildren().size());
 
 Also verify detail error does not clear playback sources.
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
 Expected: FAIL because `MediaDetailState` has no detail metadata fields.
 
-- [ ] **Step 3: Implement state fields**
+- [x] **Step 3: Implement state fields**
 
 Add `MediaDetailInfo detailInfo`, `boolean loadingDetail`, `String detailError`, and `detailChildren()` helper. Keep playback source fields untouched.
 
-- [ ] **Step 4: Run green test**
+- [x] **Step 4: Run green test**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
@@ -101,7 +101,7 @@ Expected: PASS.
 - Modify: `app/src/main/java/com/fnostv/android4/net/FnosRestClient.java`
 - Modify: `app/src/test/java/com/fnostv/android4/net/FnosRestClientTest.java`
 
-- [ ] **Step 1: Write failing REST helper tests**
+- [x] **Step 1: Write failing REST helper tests**
 
 Add tests for `mediaDetailPathOrPayload` behavior if implemented as a static helper, or for parser-only fallback if no stable endpoint exists.
 
@@ -112,13 +112,13 @@ assertEquals("/item/detail?guid=abc", FnosRestClient.mediaDetailPath("abc"));
 assertEquals("", FnosRestClient.mediaDetailPath(""));
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
 Expected: FAIL because the helper does not exist.
 
-- [ ] **Step 3: Add best-effort client method**
+- [x] **Step 3: Add best-effort client method**
 
 Add:
 
@@ -128,7 +128,7 @@ public MediaDetailInfo mediaDetail(String guid) throws FnosRpcException
 
 Use `GET /item/detail?guid=<guid>` first. If that endpoint fails, let the caller handle failure. Do not make playback depend on it.
 
-- [ ] **Step 4: Run green test**
+- [x] **Step 4: Run green test**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
@@ -139,11 +139,11 @@ Expected: PASS.
 **Files:**
 - Modify: `app/src/main/java/com/fnostv/android4/ui/NativeMediaDetailView.java`
 
-- [ ] **Step 1: Add UI fields**
+- [x] **Step 1: Add UI fields**
 
 Add `overviewView`, `detailStatusView`, and `childrenView`.
 
-- [ ] **Step 2: Render metadata**
+- [x] **Step 2: Render metadata**
 
 In `render()`:
 
@@ -154,7 +154,7 @@ In `render()`:
 - detail loading shows `详情加载中`.
 - detail error is muted and does not replace playback source status.
 
-- [ ] **Step 3: Run build test**
+- [x] **Step 3: Run build test**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
@@ -165,11 +165,11 @@ Expected: PASS.
 **Files:**
 - Modify: `app/src/main/java/com/fnostv/android4/MainActivity.java`
 
-- [ ] **Step 1: Start detail fetch beside source fetch**
+- [x] **Step 1: Start detail fetch beside source fetch**
 
 In `openMediaDetail(...)`, after showing the detail page, call `resolveDetailInfo(entry)` when `entry.path.length() > 0`.
 
-- [ ] **Step 2: Implement `resolveDetailInfo(...)`**
+- [x] **Step 2: Implement `resolveDetailInfo(...)`**
 
 Use a background thread:
 
@@ -181,11 +181,11 @@ MediaDetailInfo info = newRestClient().mediaDetail(entry.path);
 
 On success, call `state.setDetailInfo(info)`. On failure, call `state.setDetailError("详情信息暂不可用")`.
 
-- [ ] **Step 3: Guard stale callbacks**
+- [x] **Step 3: Guard stale callbacks**
 
 Only update the UI if `mediaDetailState != null && mediaDetailState.entry == entry`.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
@@ -198,11 +198,11 @@ Expected: PASS.
 - Modify: `RELEASE_NOTES.md`
 - Modify: `docs/fnos-interface-map.md`
 
-- [ ] **Step 1: Document behavior**
+- [x] **Step 1: Document behavior**
 
 Mention best-effort detail metadata, child-entry preparation, and non-blocking fallback when detail APIs fail.
 
-- [ ] **Step 2: Run final verification**
+- [x] **Step 2: Run final verification**
 
 Run:
 
@@ -215,7 +215,7 @@ scripts\build-debug.cmd
 
 Expected: no conflict markers, no whitespace errors, unit tests pass, debug build succeeds.
 
-- [ ] **Step 3: Commit and push**
+- [x] **Step 3: Commit and push**
 
 Run:
 
