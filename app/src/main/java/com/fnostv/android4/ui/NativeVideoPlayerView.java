@@ -21,6 +21,7 @@ import android.widget.TextView;
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosPlaybackSource;
 import com.fnostv.android4.player.IjkPlayerEngine;
+import com.fnostv.android4.player.NumberSeekShortcut;
 import com.fnostv.android4.player.PlayerEngine;
 import com.fnostv.android4.player.PlaybackOptions;
 import com.fnostv.android4.player.PlaybackStrategy;
@@ -348,6 +349,11 @@ public final class NativeVideoPlayerView {
                 || keyCode == KeyEvent.KEYCODE_SPACE) {
             return toggle();
         }
+        int numberSeekPercent = NumberSeekShortcut.percentForKey(keyCode);
+        if (numberSeekPercent >= 0) {
+            seekToPercent(numberSeekPercent);
+            return true;
+        }
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT
                 || keyCode == KeyEvent.KEYCODE_MEDIA_REWIND) {
             seekBy(keyCode == KeyEvent.KEYCODE_MEDIA_REWIND ? -LARGE_SEEK_STEP_MS : -SEEK_STEP_MS);
@@ -667,6 +673,18 @@ public final class NativeVideoPlayerView {
         requestSeekTo(target);
         int seconds = Math.abs(deltaMs) / 1000;
         showHint(deltaMs > 0 ? "快进 " + seconds + " 秒" : "快退 " + seconds + " 秒");
+        showControlsTemporarily();
+    }
+
+    private void seekToPercent(int percent) {
+        int target = NumberSeekShortcut.targetMs(duration(), percent);
+        if (target < 0) {
+            showHint("暂时无法跳转");
+            showControlsTemporarily();
+            return;
+        }
+        requestSeekTo(target);
+        showHint(NumberSeekShortcut.hintForPercent(percent));
         showControlsTemporarily();
     }
 
