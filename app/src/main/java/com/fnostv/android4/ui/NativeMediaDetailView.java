@@ -96,6 +96,10 @@ public final class NativeMediaDetailView {
         return view != null && view.getVisibility() == View.VISIBLE;
     }
 
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        return isVisible() && handleKey(keyCode, event);
+    }
+
     public void setPosterAuthorizationToken(String token) {
         posterLoader.setAuthorizationToken(token);
         render();

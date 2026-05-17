@@ -45,8 +45,10 @@ import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
 import com.fnostv.android4.ui.FileBrowserLabels;
 import com.fnostv.android4.ui.HomePosterSlots;
+import com.fnostv.android4.ui.MediaDetailState;
 import com.fnostv.android4.ui.NativeFileBrowserView;
 import com.fnostv.android4.ui.NativeHomeView;
+import com.fnostv.android4.ui.NativeMediaDetailView;
 import com.fnostv.android4.ui.NativeVideoPlayerView;
 import com.fnostv.android4.ui.StatusOverlay;
 import com.fnostv.android4.util.Constants;
@@ -62,7 +64,7 @@ import com.fnostv.android4.web.WebViewEvents;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class MainActivity extends Activity implements WebViewEvents, RemoteActions, NativeHomeView.Listener, NativeFileBrowserView.Listener, NativeVideoPlayerView.Listener {
+public final class MainActivity extends Activity implements WebViewEvents, RemoteActions, NativeHomeView.Listener, NativeFileBrowserView.Listener, NativeMediaDetailView.Listener, NativeVideoPlayerView.Listener {
     private static final int BROWSER_MODE_FILES = 0;
     private static final int BROWSER_MODE_RECENT = 1;
     private static final int BROWSER_MODE_MEDIA = 2;
@@ -73,6 +75,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private WebView webView;
     private NativeHomeView nativeHomeView;
     private NativeFileBrowserView fileBrowserView;
+    private NativeMediaDetailView mediaDetailView;
     private NativeVideoPlayerView nativeVideoPlayerView;
     private ProgressBar progressBar;
     private StatusOverlay statusOverlay;
@@ -89,6 +92,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private boolean nativeAuthRunning;
     private String currentFilePath = "";
     private int browserMode = BROWSER_MODE_FILES;
+    private MediaDetailState mediaDetailState;
     private final Handler loadTimeoutHandler = new Handler();
     private final Runnable loadTimeoutRunnable = new Runnable() {
         @Override
@@ -162,6 +166,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         if (nativeVideoPlayerView != null && nativeVideoPlayerView.onKeyDown(keyCode, event)) {
             return true;
         }
+        if (mediaDetailView != null && mediaDetailView.onKeyDown(keyCode, event)) {
+            return true;
+        }
         if (remoteKeyHandler.onKeyDown(keyCode, event)) {
             return true;
         }
@@ -184,6 +191,10 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 ViewGroup.LayoutParams.MATCH_PARENT));
         fileBrowserView = new NativeFileBrowserView(this, this);
         root.addView(fileBrowserView.create(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        mediaDetailView = new NativeMediaDetailView(this, this);
+        root.addView(mediaDetailView.create(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         nativeVideoPlayerView = new NativeVideoPlayerView(this, this);
@@ -217,8 +228,10 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         fileBrowserView.setPosterAuthorizationToken("");
         nativeHomeView.setPosterBaseUrl(profile.baseUrl);
         nativeHomeView.setPosterAuthorizationToken("");
+        mediaDetailView.setPosterAuthorizationToken("");
         nativeHomeView.hide();
         fileBrowserView.hide();
+        mediaDetailView.hide();
         nativeVideoPlayerView.hide();
         if (!profile.isReady()) {
             showStatus("首次使用请配置飞牛服务地址");
@@ -320,6 +333,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         statusOverlay.hide();
         webView.setVisibility(View.GONE);
         fileBrowserView.hide();
+        mediaDetailView.hide();
         nativeVideoPlayerView.hide();
         nativeHomeView.updateUser(profile == null ? "" : profile.username, profile == null ? "" : profile.username, true);
         updateHomeCounts();
@@ -417,7 +431,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             openFileBrowser(entry.path);
             return;
         }
-        playFileEntry(entry);
+        openMediaDetail(entry);
     }
 
     @Override
@@ -438,6 +452,50 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     }
 
     @Override
+    public void onDetailPlayRequested(MediaDetailState state) {
+        if (state == null || state.entry == null) {
+            return;
+        }
+        List<FnosPlaybackSource> sources = state.sources();
+        if (sources.size() > 0) {
+            mediaDetailView.hide();
+            playResolvedSources(state.entry, sources);
+            return;
+        }
+        String url = state.entry.playbackUrl();
+        if (url.length() > 0) {
+            mediaDetailView.hide();
+            playResolvedUrl(state.entry, url);
+            return;
+        }
+        resolveAndPlaySources(state.entry);
+    }
+
+    @Override
+    public void onDetailFavoriteToggled(MediaDetailState state) {
+        if (state == null || state.entry == null) {
+            return;
+        }
+        onFileFavoriteToggled(state.entry);
+        state.favorite = favoriteStore.isFavorite(state.entry);
+        mediaDetailView.update(state);
+    }
+
+    @Override
+    public void onDetailBackRequested() {
+        closeMediaDetail();
+    }
+
+    @Override
+    public void onDetailSourceSelected(MediaDetailState state, int sourceIndex) {
+        if (state == null) {
+            return;
+        }
+        state.selectSource(sourceIndex);
+        mediaDetailView.update(state);
+    }
+
+    @Override
     public void onNativeVideoError(FnosFileEntry entry, String url, String reason) {
         Logger.w("Native video playback failed: " + reason
                 + " file=" + (entry == null ? "" : entry.name)
@@ -452,6 +510,10 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     public boolean goBack() {
         if (nativeVideoPlayerView.isVisible()) {
             nativeVideoPlayerView.hide();
+            return true;
+        }
+        if (mediaDetailView.isVisible()) {
+            closeMediaDetail();
             return true;
         }
         if (fullscreenVideoController.isShowing()) {
@@ -506,6 +568,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         browserMode = BROWSER_MODE_FILES;
         currentFilePath = path == null ? "" : path;
         nativeHomeView.hide();
+        mediaDetailView.hide();
         webView.setVisibility(View.GONE);
         showStatus("正在加载目录...");
         new Thread(new Runnable() {
@@ -532,6 +595,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         browserMode = BROWSER_MODE_RECENT;
         currentFilePath = "";
         nativeHomeView.hide();
+        mediaDetailView.hide();
         webView.setVisibility(View.GONE);
         showStatus("正在加载继续观看...");
         new Thread(new Runnable() {
@@ -553,6 +617,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         browserMode = BROWSER_MODE_FAVORITES;
         currentFilePath = "";
         nativeHomeView.hide();
+        mediaDetailView.hide();
         webView.setVisibility(View.GONE);
         showStatus("正在加载收藏...");
         new Thread(new Runnable() {
@@ -574,6 +639,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         browserMode = BROWSER_MODE_CATEGORY;
         currentFilePath = "";
         nativeHomeView.hide();
+        mediaDetailView.hide();
         webView.setVisibility(View.GONE);
         showStatus("正在加载" + title + "...");
         new Thread(new Runnable() {
@@ -615,6 +681,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         browserMode = BROWSER_MODE_CATEGORY;
         currentFilePath = "";
         nativeHomeView.hide();
+        mediaDetailView.hide();
         webView.setVisibility(View.GONE);
         statusOverlay.hide();
         List<FnosFileEntry> entries = filterSearch(knownMediaEntries(), keyword);
@@ -625,6 +692,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         browserMode = BROWSER_MODE_MEDIA;
         currentFilePath = path == null ? "" : path;
         nativeHomeView.hide();
+        mediaDetailView.hide();
         webView.setVisibility(View.GONE);
         showStatus("正在加载影视入口...");
         new Thread(new Runnable() {
@@ -910,6 +978,63 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         return index > 0 ? path.substring(0, index) : "";
     }
 
+    private void openMediaDetail(final FnosFileEntry entry) {
+        if (entry == null || entry.directory) {
+            return;
+        }
+        if (!entry.isVideo()) {
+            showStatus("暂不支持打开该文件\n" + entry.name);
+            return;
+        }
+        statusOverlay.hide();
+        mediaDetailState = new MediaDetailState(entry, favoriteStore.isFavorite(entry));
+        mediaDetailView.show(mediaDetailState, profile == null ? "" : profile.baseUrl);
+        String url = entry.playbackUrl();
+        if (url.length() > 0) {
+            List<FnosPlaybackSource> direct = new ArrayList<FnosPlaybackSource>();
+            direct.add(new FnosPlaybackSource("原画", url));
+            mediaDetailState.setSources(direct);
+            mediaDetailView.update(mediaDetailState);
+            return;
+        }
+        resolveDetailSources(entry);
+    }
+
+    private void closeMediaDetail() {
+        if (mediaDetailView != null) {
+            mediaDetailView.hide();
+        }
+        mediaDetailState = null;
+    }
+
+    private void resolveDetailSources(final FnosFileEntry entry) {
+        if (mediaDetailState == null || mediaDetailState.entry != entry) {
+            return;
+        }
+        mediaDetailState.setLoadingSources(true);
+        mediaDetailView.update(mediaDetailState);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final PlaybackSourcesResult result = resolvePlaybackSources(entry);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (mediaDetailState == null || mediaDetailState.entry != entry) {
+                            return;
+                        }
+                        if (result.success) {
+                            mediaDetailState.setSources(result.sources);
+                        } else {
+                            mediaDetailState.setError(result.message);
+                        }
+                        mediaDetailView.update(mediaDetailState);
+                    }
+                });
+            }
+        }, "fnos-detail-sources").start();
+    }
+
     private void playFileEntry(FnosFileEntry entry) {
         if (!entry.isVideo()) {
             showStatus("暂不支持打开该文件\n" + entry.name);
@@ -925,6 +1050,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private void playResolvedUrl(FnosFileEntry entry, String url) {
         statusOverlay.hide();
+        closeMediaDetail();
         recentPlaybackStore.remember(entry);
         if (entry.canTryNativePlayback()) {
             nativeVideoPlayerView.play(entry, url);
@@ -936,6 +1062,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private void playResolvedSources(FnosFileEntry entry, List<FnosPlaybackSource> sources) {
         statusOverlay.hide();
+        closeMediaDetail();
         recentPlaybackStore.remember(entry);
         if (entry.canTryNativePlayback()) {
             nativeVideoPlayerView.play(entry, sources);
