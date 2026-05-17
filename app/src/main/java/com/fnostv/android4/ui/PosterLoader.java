@@ -21,7 +21,9 @@ import java.net.URL;
 final class PosterLoader {
     private static final int MAX_DECODE_WIDTH = 720;
     private static final int MAX_DECODE_HEIGHT = 720;
+    private static final int MAX_ACTIVE_LOADS = 3;
     private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(18);
+    private final PosterLoadThrottle throttle = new PosterLoadThrottle(MAX_ACTIVE_LOADS);
     private String authorizationToken = "";
 
     void setAuthorizationToken(String token) {
@@ -52,6 +54,9 @@ final class PosterLoader {
             if (loadedOverlay != null) {
                 loadedOverlay.setVisibility(View.VISIBLE);
             }
+            return;
+        }
+        if (!throttle.tryStart(url)) {
             return;
         }
         new PosterTask(url, authorizationToken, frame, image, fallback, loadedOverlay).execute();
@@ -134,6 +139,7 @@ final class PosterLoader {
 
         @Override
         protected void onPostExecute(Bitmap bitmap) {
+            throttle.finish(url);
             if (bitmap == null || !url.equals(frame.getTag())) {
                 return;
             }

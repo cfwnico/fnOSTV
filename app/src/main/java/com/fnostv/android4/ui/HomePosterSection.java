@@ -8,13 +8,19 @@ import java.util.List;
 
 public final class HomePosterSection {
     public final String title;
+    public final String analyticsName;
     public final String action;
     public final List<FnosFileEntry> entries;
     public final int maxVisible;
     public final boolean hasMore;
 
     HomePosterSection(String title, String action, List<FnosFileEntry> entries, int maxVisible) {
+        this(title, title, action, entries, maxVisible);
+    }
+
+    HomePosterSection(String title, String analyticsName, String action, List<FnosFileEntry> entries, int maxVisible) {
         this.title = title == null ? "" : title;
+        this.analyticsName = analyticsName == null ? "" : analyticsName;
         this.action = action == null ? "" : action;
         this.entries = Collections.unmodifiableList(entries == null
                 ? new ArrayList<FnosFileEntry>()

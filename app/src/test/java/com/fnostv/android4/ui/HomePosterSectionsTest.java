@@ -7,24 +7,33 @@ import java.util.List;
 
 public final class HomePosterSectionsTest {
     public static void main(String[] args) {
-        buildsRecentFavoritesAndMediaSectionsInOrder();
+        buildsRecentFavoritesCategoryAndMediaSectionsInOrder();
         limitsVisibleEntriesAndMarksHasMore();
         removesDuplicatePathsInsideEachSection();
         keepsMediaSectionWhenAllListsAreEmpty();
     }
 
-    private static void buildsRecentFavoritesAndMediaSectionsInOrder() {
+    private static void buildsRecentFavoritesCategoryAndMediaSectionsInOrder() {
         List<HomePosterSection> sections = HomePosterSections.from(
-                list(entry("Movie One", "/movie/one.mp4", "/poster/one.webp")),
+                list(
+                        entry("Movie One", "/video/Movies/one.mp4", "/poster/one.webp"),
+                        entry("Show S01E01", "/video/TV/show.s01e01.mkv", "/poster/show.webp"),
+                        entry("Family", "/video/Home/family.mov", "/poster/family.webp")),
                 list(entry("Recent One", "/recent/one.mp4", "/poster/recent.webp")),
                 list(entry("Favorite One", "/favorite/one.mp4", "/poster/favorite.webp")));
 
-        assertEquals("继续观看", sections.get(0).title);
+        assertEquals("Continue Watching", sections.get(0).analyticsName);
         assertEquals(NativeHomeView.ACTION_RECENT, sections.get(0).action);
-        assertEquals("我的收藏", sections.get(1).title);
+        assertEquals("Favorites", sections.get(1).analyticsName);
         assertEquals(NativeHomeView.ACTION_FAVORITES, sections.get(1).action);
-        assertEquals("影视大全", sections.get(2).title);
-        assertEquals(NativeHomeView.ACTION_MEDIA, sections.get(2).action);
+        assertEquals("Movies", sections.get(2).analyticsName);
+        assertEquals(NativeHomeView.ACTION_MOVIES, sections.get(2).action);
+        assertEquals("Series", sections.get(3).analyticsName);
+        assertEquals(NativeHomeView.ACTION_TV, sections.get(3).action);
+        assertEquals("Other", sections.get(4).analyticsName);
+        assertEquals(NativeHomeView.ACTION_OTHER, sections.get(4).action);
+        assertEquals("All Media", sections.get(5).analyticsName);
+        assertEquals(NativeHomeView.ACTION_MEDIA, sections.get(5).action);
     }
 
     private static void limitsVisibleEntriesAndMarksHasMore() {
@@ -54,7 +63,7 @@ public final class HomePosterSectionsTest {
         List<HomePosterSection> sections = HomePosterSections.from(null, null, null);
 
         assertEquals(1, sections.size());
-        assertEquals("影视大全", sections.get(0).title);
+        assertEquals("All Media", sections.get(0).analyticsName);
         assertEquals(0, sections.get(0).entries.size());
     }
 

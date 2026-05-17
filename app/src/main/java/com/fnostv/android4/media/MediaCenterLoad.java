@@ -6,7 +6,6 @@ public final class MediaCenterLoad {
     public static final String SOURCE_REST_LIBRARY = "rest-library";
     public static final String SOURCE_REST_ITEMS = "rest-items";
     public static final String SOURCE_LOCAL_INDEX = "local-index";
-    public static final String SOURCE_RPC_MEDIACENTER = "rpc-mediacenter";
     public static final String SOURCE_FILE_FALLBACK = "file-fallback";
 
     public final boolean success;

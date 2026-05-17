@@ -3,6 +3,7 @@ package com.fnostv.android4.media;
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosFileList;
 import com.fnostv.android4.net.FnosRpcException;
+import com.fnostv.android4.ui.FileBrowserLabels;
 import com.fnostv.android4.ui.NativeHomeView;
 
 import java.util.ArrayList;
@@ -11,9 +12,10 @@ import java.util.List;
 public final class MediaCenterGatewayTest {
     public static void main(String[] args) throws Exception {
         restLibraryItemsWin();
+        triesNextRestLibraryWhenFirstLibraryIsEmpty();
         emptyRestFallsBackToLocalIndex();
-        localEmptyFallsBackToRpc();
         restChildFailureFallsBackToFileList();
+        rootRestAndLocalFailureFallsBackToFileList();
         allFailuresReturnTraceMessage();
     }
 
@@ -22,15 +24,30 @@ public final class MediaCenterGatewayTest {
         rest.libraries = list("libraries", dir("Library A", "guid-a"));
         rest.items = list("guid-a", video("Movie A", "guid-video"));
         FakeLocal local = new FakeLocal(video("Local", "/local"));
-        FakeRpc rpc = new FakeRpc(video("RPC", "/rpc"));
         FakeFile file = new FakeFile(list("", video("File", "/file")));
 
-        MediaCenterLoad result = new MediaCenterGateway(rest, local, rpc, file).load("");
+        MediaCenterLoad result = new MediaCenterGateway(rest, local, file).load("");
 
         assertEquals(true, result.success);
         assertEquals("Library A", result.title);
-        assertEquals("fnOS 影视媒体库", result.subtitle);
         assertEquals("Movie A", result.list.entries.get(0).name);
+        assertEquals(MediaCenterLoad.SOURCE_REST_LIBRARY, result.source);
+    }
+
+    private static void triesNextRestLibraryWhenFirstLibraryIsEmpty() {
+        FakeRest rest = new FakeRest();
+        rest.libraries = list("libraries", dir("Empty Library", "guid-empty"), dir("Library B", "guid-b"));
+        rest.items = list("guid-empty");
+        rest.secondPath = "guid-b";
+        rest.secondItems = list("guid-b", video("Movie B", "guid-video-b"));
+        FakeLocal local = new FakeLocal(video("Local", "/local"));
+        FakeFile file = new FakeFile(list("", video("File", "/file")));
+
+        MediaCenterLoad result = new MediaCenterGateway(rest, local, file).load("");
+
+        assertEquals(true, result.success);
+        assertEquals("Library B", result.title);
+        assertEquals("Movie B", result.list.entries.get(0).name);
         assertEquals(MediaCenterLoad.SOURCE_REST_LIBRARY, result.source);
     }
 
@@ -39,46 +56,39 @@ public final class MediaCenterGatewayTest {
         rest.libraries = list("libraries");
         rest.items = list("");
         FakeLocal local = new FakeLocal(video("Local", "/local"));
-        FakeRpc rpc = new FakeRpc(video("RPC", "/rpc"));
         FakeFile file = new FakeFile(list("", video("File", "/file")));
 
-        MediaCenterLoad result = new MediaCenterGateway(rest, local, rpc, file).load("");
+        MediaCenterLoad result = new MediaCenterGateway(rest, local, file).load("");
 
         assertEquals(true, result.success);
-        assertEquals("影视大全", result.title);
-        assertEquals("本地媒体库索引", result.subtitle);
         assertEquals("Local", result.list.entries.get(0).name);
         assertEquals(MediaCenterLoad.SOURCE_LOCAL_INDEX, result.source);
-    }
-
-    private static void localEmptyFallsBackToRpc() {
-        FakeRest rest = new FakeRest();
-        rest.failMessage = "HTTP 500";
-        FakeLocal local = new FakeLocal();
-        FakeRpc rpc = new FakeRpc(video("RPC", "/rpc"));
-        FakeFile file = new FakeFile(list("", video("File", "/file")));
-
-        MediaCenterLoad result = new MediaCenterGateway(rest, local, rpc, file).load("");
-
-        assertEquals(true, result.success);
-        assertEquals("影视中心", result.title);
-        assertEquals("fnOS mediaCenter 回退", result.subtitle);
-        assertEquals("RPC", result.list.entries.get(0).name);
-        assertEquals(MediaCenterLoad.SOURCE_RPC_MEDIACENTER, result.source);
     }
 
     private static void restChildFailureFallsBackToFileList() {
         FakeRest rest = new FakeRest();
         rest.failMessage = "REST child failed";
         FakeLocal local = new FakeLocal(video("Local", "/local"));
-        FakeRpc rpc = new FakeRpc(video("RPC", "/rpc"));
         FakeFile file = new FakeFile(list("guid-a", video("File", "/file")));
 
-        MediaCenterLoad result = new MediaCenterGateway(rest, local, rpc, file).load("guid-a");
+        MediaCenterLoad result = new MediaCenterGateway(rest, local, file).load("guid-a");
 
         assertEquals(true, result.success);
-        assertEquals("影视目录", result.title);
-        assertEquals("文件模式回退：guid-a", result.subtitle);
+        assertEquals(FileBrowserLabels.mediaFallbackTitle(), result.title);
+        assertEquals(FileBrowserLabels.mediaFallbackSubtitle("guid-a"), result.subtitle);
+        assertEquals("File", result.list.entries.get(0).name);
+        assertEquals(MediaCenterLoad.SOURCE_FILE_FALLBACK, result.source);
+    }
+
+    private static void rootRestAndLocalFailureFallsBackToFileList() {
+        FakeRest rest = new FakeRest();
+        rest.failMessage = "REST down";
+        FakeLocal local = new FakeLocal();
+        FakeFile file = new FakeFile(list("", video("File", "/file")));
+
+        MediaCenterLoad result = new MediaCenterGateway(rest, local, file).load("");
+
+        assertEquals(true, result.success);
         assertEquals("File", result.list.entries.get(0).name);
         assertEquals(MediaCenterLoad.SOURCE_FILE_FALLBACK, result.source);
     }
@@ -87,17 +97,14 @@ public final class MediaCenterGatewayTest {
         FakeRest rest = new FakeRest();
         rest.failMessage = "REST down";
         FakeLocal local = new FakeLocal();
-        FakeRpc rpc = new FakeRpc();
-        rpc.failMessage = "errno=10000002";
         FakeFile file = new FakeFile(null);
         file.failMessage = "file unavailable";
 
-        MediaCenterLoad result = new MediaCenterGateway(rest, local, rpc, file).load("");
+        MediaCenterLoad result = new MediaCenterGateway(rest, local, file).load("");
 
         assertEquals(false, result.success);
         assertContains(result.message, "REST: REST down");
-        assertContains(result.message, "RPC: errno=10000002");
-        assertContains(result.message, "文件: file unavailable");
+        assertContains(result.message, "file unavailable");
     }
 
     private static FnosFileEntry video(String name, String path) {
@@ -131,6 +138,8 @@ public final class MediaCenterGatewayTest {
     private static final class FakeRest implements MediaCenterGateway.RestProvider {
         FnosFileList libraries = list("libraries");
         FnosFileList items = list("");
+        String secondPath = "";
+        FnosFileList secondItems = list("");
         String failMessage = "";
 
         @Override
@@ -148,6 +157,9 @@ public final class MediaCenterGatewayTest {
             }
             assertEquals(NativeHomeView.ACTION_ALL, category);
             assertEquals(50, pageSize);
+            if (path.equals(secondPath)) {
+                return secondItems;
+            }
             return items;
         }
     }
@@ -163,23 +175,6 @@ public final class MediaCenterGatewayTest {
 
         @Override
         public List<FnosFileEntry> entries() {
-            return entries;
-        }
-    }
-
-    private static final class FakeRpc implements MediaCenterGateway.RpcProvider {
-        private final FnosFileList entries;
-        String failMessage = "";
-
-        FakeRpc(FnosFileEntry... values) {
-            entries = list("mediaCenter", values);
-        }
-
-        @Override
-        public FnosFileList entries() throws FnosRpcException {
-            if (failMessage.length() > 0) {
-                throw new FnosRpcException(failMessage);
-            }
             return entries;
         }
     }

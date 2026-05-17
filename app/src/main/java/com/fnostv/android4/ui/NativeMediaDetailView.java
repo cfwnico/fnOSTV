@@ -168,15 +168,13 @@ public final class NativeMediaDetailView {
         panel.addView(statusView, rowParams(0, 24));
 
         LinearLayout actions = new LinearLayout(context);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setOrientation(LinearLayout.VERTICAL);
         playButton = actionButton("播放");
         sourceButton = actionButton("播放源");
         favoriteButton = actionButton("收藏");
         backButton = actionButton("返回");
-        actions.addView(playButton, actionParams());
-        actions.addView(sourceButton, actionParams());
-        actions.addView(favoriteButton, actionParams());
-        actions.addView(backButton, actionParams());
+        actions.addView(actionRow(playButton, sourceButton), actionRowParams(0));
+        actions.addView(actionRow(favoriteButton, backButton), actionRowParams(8));
         panel.addView(actions, rowParams(0, 0));
 
         playButton.setOnClickListener(new View.OnClickListener() {
@@ -300,14 +298,26 @@ public final class NativeMediaDetailView {
             listener.onDetailPlayRequested(state);
             return true;
         }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            cycleSource(1);
+            return state.sources().size() > 1;
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            cycleSource(-1);
+            return state.sources().size() > 1;
+        }
         return false;
     }
 
     private void cycleSource() {
+        cycleSource(1);
+    }
+
+    private void cycleSource(int direction) {
         if (state == null || state.sources().size() <= 1) {
             return;
         }
-        int next = (state.selectedSourceIndex() + 1) % state.sources().size();
+        int next = DetailSourceNavigation.move(state.selectedSourceIndex(), state.sources().size(), direction);
         listener.onDetailSourceSelected(state, next);
     }
 
@@ -331,6 +341,14 @@ public final class NativeMediaDetailView {
         return button;
     }
 
+    private LinearLayout actionRow(TextView first, TextView second) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(first, actionParams(false));
+        row.addView(second, actionParams(true));
+        return row;
+    }
+
     private String sizeLabel(long size) {
         if (size <= 0) {
             return "未知大小";
@@ -351,9 +369,19 @@ public final class NativeMediaDetailView {
         return params;
     }
 
-    private LinearLayout.LayoutParams actionParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(118), dp(44));
-        params.rightMargin = dp(12);
+    private LinearLayout.LayoutParams actionParams(boolean lastInRow) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1);
+        if (!lastInRow) {
+            params.rightMargin = dp(12);
+        }
+        return params;
+    }
+
+    private LinearLayout.LayoutParams actionRowParams(int top) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(top);
         return params;
     }
 

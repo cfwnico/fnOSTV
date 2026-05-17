@@ -21,14 +21,11 @@ import com.fnostv.android4.media.MediaIndexStore;
 import com.fnostv.android4.media.MediaLibrary;
 import com.fnostv.android4.media.MediaLibraryCategory;
 import com.fnostv.android4.media.MediaLibraryClassifier;
-import com.fnostv.android4.media.MediaLibraryScanner;
 import com.fnostv.android4.media.MediaLibraryStore;
 import com.fnostv.android4.net.FnosFileEntry;
+import com.fnostv.android4.net.FnosFileList;
 import com.fnostv.android4.net.FnosRestClient;
-import com.fnostv.android4.net.FnosRpcClient;
 import com.fnostv.android4.net.FnosRpcException;
-import com.fnostv.android4.net.FnosSession;
-import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.net.FnosSettingsSummary;
 import com.fnostv.android4.ui.NativeSettingsView;
 import com.fnostv.android4.ui.SettingsCompletionFlow;
@@ -52,7 +49,6 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
     };
 
     private ProfileStore store;
-    private FnosSessionStore sessionStore;
     private MediaLibraryStore mediaLibraryStore;
     private MediaIndexStore mediaIndexStore;
     private SettingsForm settingsForm;
@@ -68,7 +64,6 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         store = new ProfileStore(this);
-        sessionStore = new FnosSessionStore(this);
         mediaLibraryStore = new MediaLibraryStore(this);
         mediaIndexStore = new MediaIndexStore(this);
         settingsForm = new SettingsForm(this, this);
@@ -327,23 +322,61 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
     private ScanResult scanLibraries(List<MediaLibrary> libraries) {
         try {
             ServerProfile profile = store.load();
-            FnosSession session = sessionStore.load();
-            if (!profile.isReady() || !session.hasToken()) {
-                return ScanResult.failure("登录会话已失效，请返回重新登录后再扫描。");
+            if (!profile.isReady()) {
+                return ScanResult.failure("Server profile is not ready.");
             }
-            FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-            MediaLibraryScanner scanner = new MediaLibraryScanner(client, session);
-            List<FnosFileEntry> entries = scanner.scan(libraries);
+            FnosRestClient client = new FnosRestClient(profile);
+            client.authenticate();
+            List<FnosFileEntry> entries = new ArrayList<FnosFileEntry>();
+            List<MediaLibrary> targets = libraries == null ? new ArrayList<MediaLibrary>() : libraries;
+            for (int i = 0; i < targets.size(); i++) {
+                MediaLibrary library = targets.get(i);
+                if (library == null || !library.enabled) {
+                    continue;
+                }
+                appendUnique(entries, client.mediaItems("", library.category, 100).entries);
+            }
+            if (entries.size() == 0) {
+                FnosFileList restLibraries = client.mediaLibraries();
+                for (int i = 0; i < restLibraries.entries.size(); i++) {
+                    FnosFileEntry library = restLibraries.entries.get(i);
+                    appendUnique(entries, client.mediaItems(library.path, MediaLibraryCategory.ALL, 100).entries);
+                }
+            }
+            if (entries.size() == 0) {
+                appendUnique(entries, client.mediaItems("", MediaLibraryCategory.ALL, 100).entries);
+            }
             mediaIndexStore.replaceAll(entries);
             markLibrariesScanned(libraries);
             return ScanResult.success(entries.size());
         } catch (FnosRpcException ex) {
-            Logger.w("Media library scan failed: " + ex.getMessage());
-            return ScanResult.failure("媒体库扫描失败：" + ex.getMessage());
+            Logger.w("REST media library scan failed: " + ex.getMessage());
+            return ScanResult.failure("REST media sync failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
-            Logger.w("Media library scan crashed: " + ex.getMessage());
-            return ScanResult.failure("媒体库扫描异常：" + ex.getMessage());
+            Logger.w("REST media library scan crashed: " + ex.getMessage());
+            return ScanResult.failure("REST media sync crashed: " + ex.getMessage());
         }
+    }
+
+    private void appendUnique(List<FnosFileEntry> target, List<FnosFileEntry> source) {
+        if (target == null || source == null) {
+            return;
+        }
+        for (int i = 0; i < source.size(); i++) {
+            FnosFileEntry entry = source.get(i);
+            if (entry != null && !containsEntry(target, entry.path)) {
+                target.add(entry);
+            }
+        }
+    }
+
+    private boolean containsEntry(List<FnosFileEntry> entries, String path) {
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i).path.equals(path)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void markLibrariesScanned(List<MediaLibrary> libraries) {

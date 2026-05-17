@@ -40,11 +40,35 @@ public final class PlaybackSourceSelector {
 
     public static String displayLabel(List<FnosPlaybackSource> sources, int index) {
         if (sources == null || sources.size() == 0) {
-            return "无可用播放源";
+            return "\u65e0\u53ef\u7528\u64ad\u653e\u6e90";
         }
         int selected = clampIndex(sources, index);
         FnosPlaybackSource source = sources.get(selected);
-        return (selected + 1) + "/" + sources.size() + " " + source.label;
+        String hint = sourceHint(source.url);
+        return (selected + 1) + "/" + sources.size() + " " + source.label
+                + (hint.length() == 0 ? "" : " \u00b7 " + hint);
+    }
+
+    private static String sourceHint(String url) {
+        String cleanUrl = url == null ? "" : url;
+        int queryIndex = cleanUrl.indexOf('?');
+        if (queryIndex >= 0) {
+            cleanUrl = cleanUrl.substring(0, queryIndex);
+        }
+        String lower = cleanUrl.toLowerCase();
+        String format = "";
+        int extensionIndex = lower.lastIndexOf('.');
+        if (extensionIndex >= 0 && extensionIndex < lower.length() - 1) {
+            format = lower.substring(extensionIndex + 1).toUpperCase();
+        }
+        if ("M3U8".equals(format)) {
+            format = "HLS";
+        }
+        boolean local = !(lower.startsWith("http://") || lower.startsWith("https://"));
+        if (format.length() == 0) {
+            return local ? "local" : "";
+        }
+        return local ? format + " \u00b7 local" : format;
     }
 
     private static boolean containsUrl(List<FnosPlaybackSource> sources, String url) {

@@ -3,6 +3,7 @@ package com.fnostv.android4.ui;
 public final class NativeHomeViewTest {
     public static void main(String[] args) {
         userMenuActionsMatchSettingsRoutes();
+        sidebarLayoutFitsSmallTvWindow();
     }
 
     private static void userMenuActionsMatchSettingsRoutes() {
@@ -14,9 +15,19 @@ public final class NativeHomeViewTest {
         assertEquals("logout", NativeHomeView.ACTION_LOGOUT);
     }
 
+    private static void sidebarLayoutFitsSmallTvWindow() {
+        assertTrue(HomeSidebarLayout.estimatedContentHeightDp() <= HomeSidebarLayout.MAX_CONTENT_HEIGHT_DP);
+    }
+
     private static void assertEquals(Object expected, Object actual) {
         if (expected == null ? actual != null : !expected.equals(actual)) {
             throw new AssertionError("Expected " + expected + " but was " + actual);
+        }
+    }
+
+    private static void assertTrue(boolean value) {
+        if (!value) {
+            throw new AssertionError("Expected true");
         }
     }
 }

@@ -12,6 +12,7 @@ import android.widget.FrameLayout;
 import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.fnostv.android4.net.FnosFileEntry;
@@ -102,10 +103,14 @@ public final class NativeFileBrowserView {
         return view != null && view.getVisibility() == View.VISIBLE;
     }
 
-    private LinearLayout sidebar() {
+    private View sidebar() {
+        ScrollView scroll = new ScrollView(context);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(FnosTheme.COLOR_SIDEBAR);
+
         LinearLayout sidebar = new LinearLayout(context);
         sidebar.setOrientation(LinearLayout.VERTICAL);
-        sidebar.setPadding(dp(18), dp(26), dp(18), dp(20));
+        sidebar.setPadding(dp(18), dp(HomeSidebarLayout.PADDING_TOP), dp(18), dp(HomeSidebarLayout.PADDING_BOTTOM));
         sidebar.setBackgroundColor(FnosTheme.COLOR_SIDEBAR);
 
         LinearLayout brand = new LinearLayout(context);
@@ -119,18 +124,22 @@ public final class NativeFileBrowserView {
         logo.setGravity(Gravity.CENTER_VERTICAL);
         logo.setPadding(dp(8), 0, 0, 0);
         brand.addView(logo, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)));
-        sidebar.addView(brand, navParams(0, 28));
+        sidebar.addView(brand, navParams(0, HomeSidebarLayout.BRAND_BOTTOM));
 
-        sidebar.addView(navItem(FnosSidebarIconView.TYPE_HOME, "首页", NativeHomeView.ACTION_HOME), navParams(0, 8));
-        sidebar.addView(navItem(FnosSidebarIconView.TYPE_FAVORITE, "收藏", NativeHomeView.ACTION_FAVORITES), navParams(0, 30));
-        sidebar.addView(section("媒体库"), navParams(0, 8));
-        sidebar.addView(navItem(FnosSidebarIconView.TYPE_LIBRARY, "影视大全", NativeHomeView.ACTION_MEDIA), navParams(0, 28));
-        sidebar.addView(section("分类"), navParams(0, 8));
-        sidebar.addView(navItem(FnosSidebarIconView.TYPE_ALL, "全部", NativeHomeView.ACTION_ALL), navParams(0, 8));
-        sidebar.addView(navItem(FnosSidebarIconView.TYPE_MOVIE, "电影", NativeHomeView.ACTION_MOVIES), navParams(0, 8));
-        sidebar.addView(navItem(FnosSidebarIconView.TYPE_TV, "电视节目", NativeHomeView.ACTION_TV), navParams(0, 8));
-        sidebar.addView(navItem(FnosSidebarIconView.TYPE_OTHER, "其他", NativeHomeView.ACTION_OTHER), navParams(0, 8));
-        return sidebar;
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_HOME, "首页", NativeHomeView.ACTION_HOME), navParams(0, HomeSidebarLayout.ROW_BOTTOM));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_FAVORITE, "收藏", NativeHomeView.ACTION_FAVORITES), navParams(0, HomeSidebarLayout.GROUP_BOTTOM));
+        sidebar.addView(section("媒体库"), sectionParams(0, HomeSidebarLayout.ROW_BOTTOM));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_LIBRARY, "影视大全", NativeHomeView.ACTION_MEDIA), navParams(0, HomeSidebarLayout.GROUP_BOTTOM));
+        sidebar.addView(section("分类"), sectionParams(0, HomeSidebarLayout.ROW_BOTTOM));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_ALL, "全部", NativeHomeView.ACTION_ALL), navParams(0, HomeSidebarLayout.ROW_BOTTOM));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_MOVIE, "电影", NativeHomeView.ACTION_MOVIES), navParams(0, HomeSidebarLayout.ROW_BOTTOM));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_TV, "电视节目", NativeHomeView.ACTION_TV), navParams(0, HomeSidebarLayout.ROW_BOTTOM));
+        sidebar.addView(navItem(FnosSidebarIconView.TYPE_OTHER, "其他", NativeHomeView.ACTION_OTHER), navParams(0, 0));
+
+        scroll.addView(sidebar, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroll;
     }
 
     private LinearLayout content() {
@@ -290,7 +299,16 @@ public final class NativeFileBrowserView {
     private LinearLayout.LayoutParams navParams(int top, int bottom) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(40));
+                dp(HomeSidebarLayout.ROW_HEIGHT));
+        params.topMargin = dp(top);
+        params.bottomMargin = dp(bottom);
+        return params;
+    }
+
+    private LinearLayout.LayoutParams sectionParams(int top, int bottom) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(HomeSidebarLayout.SECTION_HEIGHT));
         params.topMargin = dp(top);
         params.bottomMargin = dp(bottom);
         return params;

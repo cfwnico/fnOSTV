@@ -72,9 +72,24 @@ public final class ServerProfile {
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             url = "http://" + url;
         }
+        int authorityEnd = firstIndexOf(url, new char[]{'/', '?', '#'}, url.indexOf("://") + 3);
+        if (authorityEnd > 0) {
+            url = url.substring(0, authorityEnd);
+        }
         while (url.endsWith("/")) {
             url = url.substring(0, url.length() - 1);
         }
         return url;
+    }
+
+    private static int firstIndexOf(String value, char[] chars, int start) {
+        int first = -1;
+        for (int i = 0; i < chars.length; i++) {
+            int index = value.indexOf(chars[i], start);
+            if (index >= 0 && (first < 0 || index < first)) {
+                first = index;
+            }
+        }
+        return first;
     }
 }

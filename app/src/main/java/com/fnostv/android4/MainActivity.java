@@ -38,10 +38,7 @@ import com.fnostv.android4.net.FnosFileList;
 import com.fnostv.android4.net.FnosMediaCounts;
 import com.fnostv.android4.net.FnosPlaybackSource;
 import com.fnostv.android4.net.FnosRestClient;
-import com.fnostv.android4.net.FnosRpcClient;
 import com.fnostv.android4.net.FnosRpcException;
-import com.fnostv.android4.net.FnosSession;
-import com.fnostv.android4.net.FnosSessionStore;
 import com.fnostv.android4.net.MediaDetailInfo;
 import com.fnostv.android4.net.RecentPlaybackStore;
 import com.fnostv.android4.tv.BackNavigationState;
@@ -86,7 +83,6 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private FullscreenVideoController fullscreenVideoController;
     private RemoteKeyHandler remoteKeyHandler;
     private ProfileStore store;
-    private FnosSessionStore sessionStore;
     private RecentPlaybackStore recentPlaybackStore;
     private FavoriteStore favoriteStore;
     private MediaLibraryStore mediaLibraryStore;
@@ -121,7 +117,6 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         store = new ProfileStore(this);
-        sessionStore = new FnosSessionStore(this);
         recentPlaybackStore = new RecentPlaybackStore(this);
         favoriteStore = new FavoriteStore(this);
         mediaLibraryStore = new MediaLibraryStore(this);
@@ -262,7 +257,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return;
         }
         nativeAuthRunning = true;
-        showStatus("正在连接 fnOS 原生 RPC 服务...");
+        showStatus("Connecting fnOS REST service...");
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -284,32 +279,19 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private NativeAuthResult authenticateNative() {
         try {
-            FnosSession session = sessionStore.load();
-            if (session.hasToken()) {
-                try {
-                    FnosRpcClient authClient = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-                    if (authClient.authToken(session)) {
-                        Logger.d("Native RPC token auth succeeded");
-                        return NativeAuthResult.success();
-                    }
-                } catch (FnosRpcException ex) {
-                    Logger.w("Native RPC token auth failed, retrying login: " + ex.getMessage());
-                }
-                sessionStore.clear();
-            }
-            FnosRpcClient loginClient = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-            FnosSession newSession = loginClient.login();
-            sessionStore.save(newSession);
-            Logger.d("Native RPC login succeeded");
+            FnosRestClient client = newRestClient();
+            String token = client.authenticate();
+            nativeHomeView.setPosterAuthorizationToken(token);
+            fileBrowserView.setPosterAuthorizationToken(token);
+            mediaDetailView.setPosterAuthorizationToken(token);
+            Logger.d("Native REST login succeeded");
             return NativeAuthResult.success();
         } catch (FnosRpcException ex) {
-            sessionStore.clear();
-            Logger.w("Native RPC login failed: " + ex.getMessage());
-            return NativeAuthResult.failure("原生登录失败：" + ex.getMessage());
+            Logger.w("Native REST login failed: " + ex.getMessage());
+            return NativeAuthResult.failure("REST login failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
-            sessionStore.clear();
-            Logger.w("Native RPC login crashed: " + ex.getMessage());
-            return NativeAuthResult.failure("原生登录异常：" + ex.getMessage());
+            Logger.w("Native REST login crashed: " + ex.getMessage());
+            return NativeAuthResult.failure("REST login crashed: " + ex.getMessage());
         }
     }
 
@@ -406,7 +388,6 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             return;
         }
         if (NativeHomeView.ACTION_LOGOUT.equals(action)) {
-            sessionStore.clear();
             openSettings("已退出登录，请重新登录。");
             return;
         }
@@ -763,17 +744,6 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                         return mediaIndexStore.list();
                     }
                 },
-                new MediaCenterGateway.RpcProvider() {
-                    @Override
-                    public FnosFileList entries() throws FnosRpcException {
-                        FnosSession session = sessionStore.load();
-                        if (!session.hasToken()) {
-                            throw new FnosRpcException("登录会话已失效");
-                        }
-                        FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-                        return client.mediaCenterEntries(session);
-                    }
-                },
                 new MediaCenterGateway.FileProvider() {
                     @Override
                     public FnosFileList files(String path) throws FnosRpcException {
@@ -827,19 +797,23 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private FileLoadResult loadFileList(String path) {
         try {
-            FnosSession session = sessionStore.load();
-            if (!session.hasToken()) {
-                return FileLoadResult.failure("登录会话已失效");
-            }
-            FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-            return FileLoadResult.success(client.listDir(session, path));
+            FnosFileList list = newRestClient().mediaItems(restAncestor(path), NativeHomeView.ACTION_ALL, 50);
+            return FileLoadResult.success(list);
         } catch (FnosRpcException ex) {
-            Logger.w("Native file list failed: " + ex.getMessage());
-            return FileLoadResult.failure("文件库加载失败：" + ex.getMessage());
+            Logger.w("REST file/media list failed: " + ex.getMessage());
+            return FileLoadResult.failure("REST media list failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
-            Logger.w("Native file list crashed: " + ex.getMessage());
-            return FileLoadResult.failure("文件库加载异常：" + ex.getMessage());
+            Logger.w("REST file/media list crashed: " + ex.getMessage());
+            return FileLoadResult.failure("REST media list crashed: " + ex.getMessage());
         }
+    }
+
+    private String restAncestor(String path) {
+        String value = path == null ? "" : path.trim();
+        if (value.indexOf('/') >= 0 || value.startsWith("http://") || value.startsWith("https://")) {
+            return "";
+        }
+        return value;
     }
 
     private FnosRestClient newRestClient() throws FnosRpcException {
@@ -1156,19 +1130,38 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private PlaybackSourcesResult resolvePlaybackSources(FnosFileEntry entry) {
         try {
-            FnosSession session = sessionStore.load();
-            if (!session.hasToken()) {
-                return PlaybackSourcesResult.failure("登录会话已失效");
+            List<FnosPlaybackSource> sources = restPlaybackSources(entry);
+            if (sources.size() > 0) {
+                return PlaybackSourcesResult.success(sources);
             }
-            FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-            return PlaybackSourcesResult.success(client.playbackSources(session, entry));
+            return PlaybackSourcesResult.failure("REST did not return a playable URL");
         } catch (FnosRpcException ex) {
-            Logger.w("Native playback sources failed: " + ex.getMessage());
-            return PlaybackSourcesResult.failure("播放源准备失败：" + ex.getMessage());
+            Logger.w("REST playback sources failed: " + ex.getMessage());
+            return PlaybackSourcesResult.failure("REST playback sources failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
-            Logger.w("Native playback sources crashed: " + ex.getMessage());
-            return PlaybackSourcesResult.failure("播放源准备异常：" + ex.getMessage());
+            Logger.w("REST playback sources crashed: " + ex.getMessage());
+            return PlaybackSourcesResult.failure("REST playback sources crashed: " + ex.getMessage());
         }
+    }
+
+    private List<FnosPlaybackSource> restPlaybackSources(FnosFileEntry entry) throws FnosRpcException {
+        List<FnosPlaybackSource> sources = new ArrayList<FnosPlaybackSource>();
+        String direct = entry == null ? "" : entry.playbackUrl();
+        if (direct.length() > 0) {
+            sources.add(new FnosPlaybackSource("??", direct));
+            return sources;
+        }
+        if (canResolveDetailInfo(entry)) {
+            MediaDetailInfo detail = newRestClient().mediaDetail(entry.path);
+            for (int i = 0; i < detail.children.size(); i++) {
+                FnosFileEntry child = detail.children.get(i);
+                String url = child.playbackUrl();
+                if (url.length() > 0) {
+                    sources.add(new FnosPlaybackSource(child.name.length() == 0 ? "??" : child.name, url));
+                }
+            }
+        }
+        return sources;
     }
 
     private void resolveAndPlayFile(final FnosFileEntry entry) {
@@ -1193,18 +1186,17 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private PlaybackResolveResult resolvePlaybackUrl(FnosFileEntry entry) {
         try {
-            FnosSession session = sessionStore.load();
-            if (!session.hasToken()) {
-                return PlaybackResolveResult.failure("登录会话已失效");
+            List<FnosPlaybackSource> sources = restPlaybackSources(entry);
+            if (sources.size() > 0) {
+                return PlaybackResolveResult.success(sources.get(0).url);
             }
-            FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
-            return PlaybackResolveResult.success(client.downloadUrl(session, entry.path));
+            return PlaybackResolveResult.failure("REST did not return a playable URL");
         } catch (FnosRpcException ex) {
-            Logger.w("Native playback url failed: " + ex.getMessage());
-            return PlaybackResolveResult.failure("视频直链准备失败：" + ex.getMessage());
+            Logger.w("REST playback url failed: " + ex.getMessage());
+            return PlaybackResolveResult.failure("REST playback URL failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
-            Logger.w("Native playback url crashed: " + ex.getMessage());
-            return PlaybackResolveResult.failure("视频直链准备异常：" + ex.getMessage());
+            Logger.w("REST playback url crashed: " + ex.getMessage());
+            return PlaybackResolveResult.failure("REST playback URL crashed: " + ex.getMessage());
         }
     }
 
