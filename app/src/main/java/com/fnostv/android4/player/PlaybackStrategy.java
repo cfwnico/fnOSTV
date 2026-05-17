@@ -19,8 +19,8 @@ public final class PlaybackStrategy {
         int fileMs = cache == PlaybackOptions.CACHE_REMOTE ? 3000 : 2000;
         boolean lowLatency = false;
         if (cache == PlaybackOptions.CACHE_REMOTE && isLikelyLanUrl(url) && !highRisk) {
-            networkMs = 3500;
-            fileMs = 1500;
+            networkMs = 2500;
+            fileMs = 1000;
             lowLatency = true;
         } else if (cache == PlaybackOptions.CACHE_STABLE && !highRisk) {
             networkMs = 2500;
@@ -32,8 +32,9 @@ public final class PlaybackStrategy {
             networkMs = Math.max(networkMs, cache == PlaybackOptions.CACHE_REMOTE ? 8000 : 5000);
             fileMs = Math.max(fileMs, 2500);
         }
-        int probeSizeKb = fluent ? 2048 : (lowLatency ? 512 : 768);
-        int analyzeDurationMs = fluent ? 2500 : (lowLatency ? 800 : 1200);
+        boolean fastLan = cache == PlaybackOptions.CACHE_REMOTE && lowLatency;
+        int probeSizeKb = fluent ? 2048 : (fastLan ? 384 : (lowLatency ? 512 : 768));
+        int analyzeDurationMs = fluent ? 2500 : (fastLan ? 600 : (lowLatency ? 800 : 1200));
         return new PlaybackOptions(
                 decoder,
                 cache,

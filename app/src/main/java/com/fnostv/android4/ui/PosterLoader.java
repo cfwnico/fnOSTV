@@ -13,11 +13,14 @@ import android.widget.TextView;
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosRestClient;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
 final class PosterLoader {
+    private static final int MAX_DECODE_WIDTH = 720;
+    private static final int MAX_DECODE_HEIGHT = 720;
     private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(18);
     private String authorizationToken = "";
 
@@ -91,7 +94,17 @@ final class PosterLoader {
                     return null;
                 }
                 stream = connection.getInputStream();
-                return BitmapFactory.decodeStream(stream);
+                byte[] bytes = readAllBytes(stream);
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inSampleSize = BitmapSampleSize.forBounds(
+                        bounds.outWidth,
+                        bounds.outHeight,
+                        MAX_DECODE_WIDTH,
+                        MAX_DECODE_HEIGHT);
+                return BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
             } catch (RuntimeException ignored) {
                 return null;
             } catch (Exception ignored) {
@@ -107,6 +120,16 @@ final class PosterLoader {
                     connection.disconnect();
                 }
             }
+        }
+
+        private byte[] readAllBytes(InputStream stream) throws Exception {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = stream.read(buffer)) >= 0) {
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
         }
 
         @Override

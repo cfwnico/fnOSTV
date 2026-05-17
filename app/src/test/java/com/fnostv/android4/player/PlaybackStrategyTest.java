@@ -5,6 +5,8 @@ public final class PlaybackStrategyTest {
         highRiskRemoteMkvUsesSoftwareFluentProfile();
         normalMp4KeepsHardwareStableProfile();
         lanHttpMp4UsesLowLatencyStartup();
+        localhostHttpMp4UsesLowLatencyStartup();
+        internetHttpMp4KeepsStableStartup();
         localMp4UsesLowLatencyStartup();
         highRiskLanMkvStillUsesSoftwareFluentProfile();
         frequentBufferingRaisesCacheWithoutUnboundedGrowth();
@@ -50,8 +52,46 @@ public final class PlaybackStrategyTest {
         assertEquals(PlaybackOptions.DECODER_HARDWARE, options.decoderMode);
         assertEquals(PlaybackOptions.CACHE_REMOTE, options.cacheMode);
         assertEquals(PlaybackOptions.PROFILE_LOW_LATENCY, options.profileMode);
-        assertEquals(3500, options.networkCachingMs);
-        assertEquals(1500, options.fileCachingMs);
+        assertEquals(2500, options.networkCachingMs);
+        assertEquals(1000, options.fileCachingMs);
+        assertEquals(384, options.probeSizeKb);
+        assertEquals(600, options.analyzeDurationMs);
+        assertFalse(options.allowFrameDrop);
+        assertFalse(options.fastDecode);
+    }
+
+    private static void localhostHttpMp4UsesLowLatencyStartup() {
+        PlaybackOptions options = PlaybackStrategy.initialOptions(
+                "http://127.0.0.1:5666/v/api/v1/file/video.mp4",
+                "Movie.1080p.H264.mp4",
+                1024L * 1024L * 1024L,
+                true);
+
+        assertEquals(PlaybackOptions.DECODER_HARDWARE, options.decoderMode);
+        assertEquals(PlaybackOptions.CACHE_REMOTE, options.cacheMode);
+        assertEquals(PlaybackOptions.PROFILE_LOW_LATENCY, options.profileMode);
+        assertEquals(2500, options.networkCachingMs);
+        assertEquals(1000, options.fileCachingMs);
+        assertEquals(384, options.probeSizeKb);
+        assertEquals(600, options.analyzeDurationMs);
+        assertFalse(options.allowFrameDrop);
+        assertFalse(options.fastDecode);
+    }
+
+    private static void internetHttpMp4KeepsStableStartup() {
+        PlaybackOptions options = PlaybackStrategy.initialOptions(
+                "https://example.com/video/movie.mp4",
+                "Movie.1080p.H264.mp4",
+                1024L * 1024L * 1024L,
+                true);
+
+        assertEquals(PlaybackOptions.DECODER_HARDWARE, options.decoderMode);
+        assertEquals(PlaybackOptions.CACHE_REMOTE, options.cacheMode);
+        assertEquals(PlaybackOptions.PROFILE_STABLE, options.profileMode);
+        assertEquals(6000, options.networkCachingMs);
+        assertEquals(3000, options.fileCachingMs);
+        assertEquals(768, options.probeSizeKb);
+        assertEquals(1200, options.analyzeDurationMs);
         assertFalse(options.allowFrameDrop);
         assertFalse(options.fastDecode);
     }
@@ -68,6 +108,8 @@ public final class PlaybackStrategyTest {
         assertEquals(PlaybackOptions.PROFILE_LOW_LATENCY, options.profileMode);
         assertEquals(2500, options.networkCachingMs);
         assertEquals(1200, options.fileCachingMs);
+        assertEquals(512, options.probeSizeKb);
+        assertEquals(800, options.analyzeDurationMs);
         assertFalse(options.allowFrameDrop);
         assertFalse(options.fastDecode);
     }
