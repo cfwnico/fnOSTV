@@ -456,7 +456,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         if (state == null || state.entry == null) {
             return;
         }
-        List<FnosPlaybackSource> sources = state.sources();
+        List<FnosPlaybackSource> sources = state.sourcesForPlayback();
         if (sources.size() > 0) {
             mediaDetailView.hide();
             playResolvedSources(state.entry, sources);

@@ -11,6 +11,7 @@ public final class MediaDetailStateTest {
         emptySourcesAreSafe();
         selectsCurrentSource();
         storesLoadingAndErrorState();
+        selectedSourceCanBeMovedFirstForPlayback();
     }
 
     private static void emptySourcesAreSafe() {
@@ -40,6 +41,20 @@ public final class MediaDetailStateTest {
         state.setError("播放源准备失败");
         assertEquals(false, state.loadingSources);
         assertEquals("播放源准备失败", state.errorMessage);
+    }
+
+    private static void selectedSourceCanBeMovedFirstForPlayback() {
+        MediaDetailState state = new MediaDetailState(entry(), false);
+        List<FnosPlaybackSource> sources = new ArrayList<FnosPlaybackSource>();
+        sources.add(new FnosPlaybackSource("原画", "http://host/a.mp4"));
+        sources.add(new FnosPlaybackSource("1080P", "http://host/b.mp4"));
+        state.setSources(sources);
+        state.selectSource(1);
+
+        List<FnosPlaybackSource> ordered = state.sourcesForPlayback();
+
+        assertEquals("1080P", ordered.get(0).label);
+        assertEquals("原画", ordered.get(1).label);
     }
 
     private static FnosFileEntry entry() {

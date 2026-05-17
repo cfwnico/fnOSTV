@@ -44,6 +44,17 @@ public final class MediaDetailState {
         return new ArrayList<FnosPlaybackSource>(sources);
     }
 
+    public List<FnosPlaybackSource> sourcesForPlayback() {
+        List<FnosPlaybackSource> ordered = sources();
+        if (ordered.size() <= 1) {
+            return ordered;
+        }
+        int selected = PlaybackSourceSelector.clampIndex(ordered, selectedSourceIndex);
+        FnosPlaybackSource first = ordered.remove(selected);
+        ordered.add(0, first);
+        return ordered;
+    }
+
     public void selectSource(int index) {
         selectedSourceIndex = PlaybackSourceSelector.clampIndex(sources, index);
     }
