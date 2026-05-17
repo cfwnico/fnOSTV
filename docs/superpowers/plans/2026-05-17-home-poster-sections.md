@@ -17,7 +17,7 @@
 - Create: `app/src/main/java/com/fnostv/android4/ui/HomePosterSections.java`
 - Create: `app/src/test/java/com/fnostv/android4/ui/HomePosterSectionsTest.java`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add `HomePosterSectionsTest` with these test cases:
 
@@ -108,13 +108,13 @@ public final class HomePosterSectionsTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
 Expected: FAIL because `HomePosterSection` and `HomePosterSections` do not exist.
 
-- [ ] **Step 3: Implement `HomePosterSection`**
+- [x] **Step 3: Implement `HomePosterSection`**
 
 Create `HomePosterSection`:
 
@@ -151,7 +151,7 @@ public final class HomePosterSection {
 }
 ```
 
-- [ ] **Step 4: Implement `HomePosterSections`**
+- [x] **Step 4: Implement `HomePosterSections`**
 
 Create `HomePosterSections` with bounded section defaults:
 
@@ -213,7 +213,7 @@ public final class HomePosterSections {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify green**
+- [x] **Step 5: Run tests to verify green**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
@@ -225,7 +225,7 @@ Expected: PASS.
 - Modify: `app/src/main/java/com/fnostv/android4/MainActivity.java`
 - Modify: `app/src/main/java/com/fnostv/android4/ui/NativeHomeView.java`
 
-- [ ] **Step 1: Add failing compile-time usage**
+- [x] **Step 1: Add failing compile-time usage**
 
 Update `MainActivity.updateHomeCounts()` to call a new `nativeHomeView.updatePosterSections(...)` method after the existing `updatePosterCards(...)` call:
 
@@ -241,13 +241,13 @@ nativeHomeView.updatePosterSections(HomePosterSections.from(mediaEntries, recent
 
 Import `com.fnostv.android4.ui.HomePosterSections`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
 Expected: FAIL because `NativeHomeView.updatePosterSections(...)` does not exist.
 
-- [ ] **Step 3: Add a no-op `NativeHomeView.updatePosterSections(...)`**
+- [x] **Step 3: Add a no-op `NativeHomeView.updatePosterSections(...)`**
 
 Add the method first with storage only:
 
@@ -261,7 +261,7 @@ public void updatePosterSections(List<HomePosterSection> sections) {
 
 Add imports for `java.util.ArrayList` and `java.util.List` if not already present.
 
-- [ ] **Step 4: Run tests to verify compile is green**
+- [x] **Step 4: Run tests to verify compile is green**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
@@ -272,7 +272,7 @@ Expected: PASS.
 **Files:**
 - Modify: `app/src/main/java/com/fnostv/android4/ui/NativeHomeView.java`
 
-- [ ] **Step 1: Introduce a section container**
+- [x] **Step 1: Introduce a section container**
 
 Add a field:
 
@@ -289,7 +289,7 @@ content.addView(posterSectionContainer, rowParams(0, 0));
 renderPosterSections();
 ```
 
-- [ ] **Step 2: Implement `renderPosterSections()`**
+- [x] **Step 2: Implement `renderPosterSections()`**
 
 Add:
 
@@ -315,7 +315,7 @@ private void renderPosterSections() {
 }
 ```
 
-- [ ] **Step 3: Implement `sectionRow(...)`**
+- [x] **Step 3: Implement `sectionRow(...)`**
 
 Add:
 
@@ -346,7 +346,7 @@ private View sectionRow(HomePosterSection section) {
 }
 ```
 
-- [ ] **Step 4: Re-render on updates**
+- [x] **Step 4: Re-render on updates**
 
 Change `updatePosterSections(...)` to call:
 
@@ -356,7 +356,7 @@ renderPosterSections();
 
 Keep `updatePosterCards(...)` during this slice so the hero, recent, and favorite fields continue working while the new section renderer matures.
 
-- [ ] **Step 5: Run build verification**
+- [x] **Step 5: Run build verification**
 
 Run: `. .\scripts\env.ps1; gradle --no-daemon testDebugUnitTest`
 
@@ -368,7 +368,7 @@ Expected: PASS.
 - Modify: `README.md`
 - Modify: `RELEASE_NOTES.md`
 
-- [ ] **Step 1: Update documentation**
+- [x] **Step 1: Update documentation**
 
 Add README capability bullets:
 
@@ -382,7 +382,7 @@ Add release note:
 - 首页海报墙分区：继续观看、收藏和影视大全按有限数量展示，避免旧设备一次渲染过多卡片。
 ```
 
-- [ ] **Step 2: Run final verification**
+- [x] **Step 2: Run final verification**
 
 Run:
 
@@ -395,7 +395,7 @@ scripts\build-debug.cmd
 
 Expected: no conflict markers, no whitespace errors, unit tests pass, debug build succeeds.
 
-- [ ] **Step 3: Commit and push**
+- [x] **Step 3: Commit and push**
 
 Run:
 

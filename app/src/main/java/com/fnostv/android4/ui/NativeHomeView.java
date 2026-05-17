@@ -8,9 +8,13 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.fnostv.android4.net.FnosFileEntry;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public final class NativeHomeView {
     public interface Listener {
@@ -51,6 +55,8 @@ public final class NativeHomeView {
     private HomeMediaCard heroCard;
     private HomeMediaCard recentCard;
     private HomeMediaCard favoriteCard;
+    private LinearLayout posterSectionContainer;
+    private List<HomePosterSection> posterSections = new ArrayList<HomePosterSection>();
     private String posterBaseUrl = "";
     private String username = "--";
     private String sourceName = "--";
@@ -142,6 +148,11 @@ public final class NativeHomeView {
         }
     }
 
+    public void updatePosterSections(List<HomePosterSection> sections) {
+        posterSections = sections == null ? new ArrayList<HomePosterSection>() : new ArrayList<HomePosterSection>(sections);
+        renderPosterSections();
+    }
+
     public void updateUser(String username, String sourceName, boolean admin) {
         this.username = emptyToDefault(username, "--");
         this.sourceName = emptyToDefault(sourceName, this.username);
@@ -214,20 +225,22 @@ public final class NativeHomeView {
         top.addView(iconButton(FnosActionIconButton.TYPE_SETTINGS, ACTION_SETTINGS), iconParams());
         content.addView(top, rowParams(0, 30));
 
-        content.addView(sectionTitle("媒体库"), rowParams(0, 12));
-        heroCard = mediaCard("影视大全\n1 个媒体库", ACTION_MEDIA, dp(390), dp(76), true);
-        content.addView(heroCard, rowHeightParams(0, 28, 112));
+        ScrollView scroll = new ScrollView(context);
+        LinearLayout body = new LinearLayout(context);
+        body.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(body, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        content.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        content.addView(sectionLink("影视大全  ›", ACTION_MEDIA), rowParams(0, 12));
-        LinearLayout cards = new LinearLayout(context);
-        cards.setOrientation(LinearLayout.HORIZONTAL);
-        recentCard = mediaCard("继续观看\n暂无最近播放", ACTION_RECENT, dp(160), dp(235), false);
-        cards.addView(recentCard, new LinearLayout.LayoutParams(dp(160), dp(235)));
-        favoriteCard = mediaCard("收藏\n快速访问", ACTION_FAVORITES, dp(160), dp(235), false);
-        LinearLayout.LayoutParams favoriteParams = new LinearLayout.LayoutParams(dp(160), dp(235));
-        favoriteParams.leftMargin = dp(16);
-        cards.addView(favoriteCard, favoriteParams);
-        content.addView(cards, rowParams(0, 0));
+        body.addView(sectionTitle("媒体库"), rowParams(0, 12));
+        heroCard = mediaCard("影视大全\n1 个媒体库", ACTION_MEDIA, dp(390), dp(76), true);
+        body.addView(heroCard, rowHeightParams(0, 28, 112));
+
+        posterSectionContainer = new LinearLayout(context);
+        posterSectionContainer.setOrientation(LinearLayout.VERTICAL);
+        body.addView(posterSectionContainer, rowParams(0, 0));
+        renderPosterSections();
         return content;
     }
 
@@ -323,6 +336,54 @@ public final class NativeHomeView {
         if (favoriteCard != null) {
             favoriteCard.reloadPoster();
         }
+        renderPosterSections();
+    }
+
+    private void renderPosterSections() {
+        if (posterSectionContainer == null) {
+            return;
+        }
+        posterSectionContainer.removeAllViews();
+        if (posterSections.size() == 0) {
+            posterSectionContainer.addView(sectionLink("影视大全  ›", ACTION_MEDIA), rowParams(0, 12));
+            LinearLayout row = new LinearLayout(context);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.addView(mediaCard("影视大全\n浏览媒体库", ACTION_MEDIA, dp(160), dp(235), false),
+                    new LinearLayout.LayoutParams(dp(160), dp(235)));
+            posterSectionContainer.addView(row, rowParams(0, 0));
+            return;
+        }
+        for (int i = 0; i < posterSections.size(); i++) {
+            HomePosterSection section = posterSections.get(i);
+            posterSectionContainer.addView(sectionLink(section.title + "  ›", section.action), rowParams(i == 0 ? 0 : 18, 12));
+            posterSectionContainer.addView(sectionRow(section), rowParams(0, 0));
+        }
+    }
+
+    private View sectionRow(HomePosterSection section) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        List<FnosFileEntry> entries = section.visibleEntries();
+        if (entries.size() == 0) {
+            row.addView(mediaCard(section.title + "\n暂无内容", section.action, dp(160), dp(235), false),
+                    new LinearLayout.LayoutParams(dp(160), dp(235)));
+            return row;
+        }
+        for (int i = 0; i < entries.size(); i++) {
+            HomeMediaCard card = mediaCard(entries.get(i).name, section.action, dp(160), dp(235), false);
+            card.setEntry(entries.get(i));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(160), dp(235));
+            if (i > 0) {
+                params.leftMargin = dp(16);
+            }
+            row.addView(card, params);
+        }
+        if (section.hasMore) {
+            LinearLayout.LayoutParams moreParams = new LinearLayout.LayoutParams(dp(120), dp(235));
+            moreParams.leftMargin = dp(16);
+            row.addView(mediaCard("更多\n" + section.title, section.action, dp(120), dp(235), false), moreParams);
+        }
+        return row;
     }
 
     private View iconButton(String iconType, final String action) {

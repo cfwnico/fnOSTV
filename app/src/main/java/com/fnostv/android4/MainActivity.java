@@ -46,6 +46,7 @@ import com.fnostv.android4.net.RecentPlaybackStore;
 import com.fnostv.android4.tv.RemoteActions;
 import com.fnostv.android4.tv.RemoteKeyHandler;
 import com.fnostv.android4.ui.HomePosterSlots;
+import com.fnostv.android4.ui.HomePosterSections;
 import com.fnostv.android4.ui.MediaDetailState;
 import com.fnostv.android4.ui.NativeFileBrowserView;
 import com.fnostv.android4.ui.NativeHomeView;
@@ -839,6 +840,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         List<FnosFileEntry> favorites = favoriteStore.list();
         List<FnosFileEntry> recent = recentPlaybackStore.list();
         nativeHomeView.updatePosterCards(HomePosterSlots.from(known, recent, favorites));
+        nativeHomeView.updatePosterSections(HomePosterSections.from(known, recent, favorites));
         nativeHomeView.updateCounts(
                 favorites.size(),
                 libraryCount,
@@ -871,6 +873,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                                     counts.otherCount,
                                     recentList.entries.size());
                             nativeHomeView.updatePosterCards(HomePosterSlots.from(mediaEntries, recentList.entries, favoriteList.entries));
+                            nativeHomeView.updatePosterSections(HomePosterSections.from(mediaEntries, recentList.entries, favoriteList.entries));
                         }
                     });
                 } catch (FnosRpcException ex) {
