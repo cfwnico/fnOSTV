@@ -8,9 +8,13 @@ public final class FnosRestClientTest {
         mediaItemPayloadMatchesWebContract();
         parsesMediaCountsFromServerSummary();
         parsesRestItemsIntoNativeBrowserEntries();
+        parsesRecentItemsUsingItemGuidForPlaybackResolution();
         parsesPosterMetadataFromRestItems();
         buildsPosterImageUrlFromServerPath();
         buildsMediaDetailPath();
+        buildsStreamPlaybackPayload();
+        parsesStreamPlaybackSources();
+        detectsPlayableStreamMetadata();
         parsesSettingsSummaryForNativeSettings();
     }
 
@@ -68,6 +72,21 @@ public final class FnosRestClientTest {
         assertFalse(list.entries.get(2).directory);
     }
 
+    private static void parsesRecentItemsUsingItemGuidForPlaybackResolution() throws Exception {
+        JSONObject response = new JSONObject(
+                "{\"code\":0,\"data\":{\"list\":[{\"guid\":\"play-record-guid\","
+                        + "\"media_guid\":\"media-detail-guid\",\"video_guid\":\"video-guid\","
+                        + "\"title\":\"1.wmv\",\"type\":\"Video\",\"poster\":\"/4d/02/poster.webp\"}]}}");
+
+        FnosFileList list = FnosRestClient.parsePlayList(response);
+
+        assertEquals(1, list.entries.size());
+        assertEquals("1.wmv", list.entries.get(0).name);
+        assertEquals("play-record-guid", list.entries.get(0).path);
+        assertTrue(list.entries.get(0).isVideo());
+        assertFalse(list.entries.get(0).directory);
+    }
+
     private static void parsesPosterMetadataFromRestItems() throws Exception {
         JSONObject response = new JSONObject(
                 "{\"code\":0,\"data\":{\"total\":2,\"list\":["
@@ -95,9 +114,44 @@ public final class FnosRestClientTest {
     }
 
     private static void buildsMediaDetailPath() {
-        assertEquals("/item/detail?guid=abc", FnosRestClient.mediaDetailPath("abc"));
-        assertEquals("/item/detail?guid=abc%20123", FnosRestClient.mediaDetailPath("abc 123"));
+        assertEquals("/item/abc", FnosRestClient.mediaDetailPath("abc"));
+        assertEquals("/item/abc%20123", FnosRestClient.mediaDetailPath("abc 123"));
         assertEquals("", FnosRestClient.mediaDetailPath(""));
+    }
+
+    private static void buildsStreamPlaybackPayload() throws Exception {
+        JSONObject payload = new JSONObject(FnosRestClient.streamPlaybackPayload("media-guid"));
+
+        assertEquals("media-guid", payload.optString("media_guid"));
+        assertTrue(payload.optString("ip").length() > 0);
+        assertEquals(1, payload.optInt("level"));
+        JSONArray userAgents = payload.getJSONObject("header").getJSONArray("User-Agent");
+        assertEquals(1, userAgents.length());
+        assertTrue(userAgents.getString(0).startsWith("Mozilla/5.0"));
+    }
+
+    private static void parsesStreamPlaybackSources() throws Exception {
+        JSONObject response = new JSONObject(
+                "{\"code\":0,\"data\":{\"file_stream\":{\"file_name\":\"1.wmv\","
+                        + "\"url\":\"http://192.168.0.199:5666/stream/1.wmv\"},"
+                        + "\"video_stream\":[{\"resolution\":\"1080P\","
+                        + "\"play_url\":\"http://192.168.0.199:5666/stream/1080.m3u8\"}]}}");
+
+        java.util.List<FnosPlaybackSource> sources = FnosRestClient.parsePlaybackSources(response);
+
+        assertEquals(2, sources.size());
+        assertEquals("1.wmv", sources.get(0).label);
+        assertEquals("http://192.168.0.199:5666/stream/1.wmv", sources.get(0).url);
+        assertEquals("1080P", sources.get(1).label);
+        assertEquals("http://192.168.0.199:5666/stream/1080.m3u8", sources.get(1).url);
+    }
+
+    private static void detectsPlayableStreamMetadata() throws Exception {
+        JSONObject response = new JSONObject(
+                "{\"code\":0,\"data\":{\"file_stream\":{\"can_play\":1},"
+                        + "\"video_stream\":{\"media_guid\":\"media-guid\"}}}");
+
+        assertTrue(FnosRestClient.canPlayStream(response));
     }
 
     private static void parsesSettingsSummaryForNativeSettings() throws Exception {

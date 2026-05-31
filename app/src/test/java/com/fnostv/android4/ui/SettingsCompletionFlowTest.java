@@ -3,7 +3,7 @@ package com.fnostv.android4.ui;
 public final class SettingsCompletionFlowTest {
     public static void main(String[] args) {
         firstConfigurationFinishesAfterReadyProfile();
-        existingConnectionErrorStaysInSettingsAfterSave();
+        existingConnectionErrorFinishesAfterSave();
         invalidProfileKeepsAccountEditorOpen();
     }
 
@@ -13,9 +13,9 @@ public final class SettingsCompletionFlowTest {
                 SettingsCompletionFlow.afterAccountSave(true, true, true));
     }
 
-    private static void existingConnectionErrorStaysInSettingsAfterSave() {
+    private static void existingConnectionErrorFinishesAfterSave() {
         assertEquals(
-                SettingsCompletionFlow.ACTION_SHOW_NATIVE_SETTINGS,
+                SettingsCompletionFlow.ACTION_FINISH,
                 SettingsCompletionFlow.afterAccountSave(false, true, true));
     }
 

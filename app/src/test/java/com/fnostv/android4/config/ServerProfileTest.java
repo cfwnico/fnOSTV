@@ -12,7 +12,6 @@ public final class ServerProfileTest {
                 "https://xdorghub.fnos.net/v/login?redirect_uri=https%3A%2F%2Fxdorghub.fnos.net%2Fv",
                 "XDORG",
                 "password",
-                true,
                 false);
 
         assertEquals("https://xdorghub.fnos.net", profile.baseUrl);
@@ -23,7 +22,6 @@ public final class ServerProfileTest {
                 "http://192.168.0.198:5666/v",
                 "XDORG",
                 "password",
-                true,
                 false);
 
         assertEquals("http://192.168.0.198:5666", profile.baseUrl);
@@ -34,7 +32,6 @@ public final class ServerProfileTest {
                 "192.168.0.198:5666",
                 "XDORG",
                 "password",
-                true,
                 false);
 
         assertEquals("http://192.168.0.198:5666", profile.baseUrl);

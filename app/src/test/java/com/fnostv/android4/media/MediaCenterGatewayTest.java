@@ -2,7 +2,7 @@ package com.fnostv.android4.media;
 
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosFileList;
-import com.fnostv.android4.net.FnosRpcException;
+import com.fnostv.android4.net.FnosApiException;
 import com.fnostv.android4.ui.FileBrowserLabels;
 import com.fnostv.android4.ui.NativeHomeView;
 
@@ -143,17 +143,17 @@ public final class MediaCenterGatewayTest {
         String failMessage = "";
 
         @Override
-        public FnosFileList libraries() throws FnosRpcException {
+        public FnosFileList libraries() throws FnosApiException {
             if (failMessage.length() > 0) {
-                throw new FnosRpcException(failMessage);
+                throw new FnosApiException(failMessage);
             }
             return libraries;
         }
 
         @Override
-        public FnosFileList items(String path, String category, int pageSize) throws FnosRpcException {
+        public FnosFileList items(String path, String category, int pageSize) throws FnosApiException {
             if (failMessage.length() > 0) {
-                throw new FnosRpcException(failMessage);
+                throw new FnosApiException(failMessage);
             }
             assertEquals(NativeHomeView.ACTION_ALL, category);
             assertEquals(50, pageSize);
@@ -188,12 +188,12 @@ public final class MediaCenterGatewayTest {
         }
 
         @Override
-        public FnosFileList files(String path) throws FnosRpcException {
+        public FnosFileList files(String path) throws FnosApiException {
             if (failMessage.length() > 0) {
-                throw new FnosRpcException(failMessage);
+                throw new FnosApiException(failMessage);
             }
             if (files == null) {
-                throw new FnosRpcException("no files");
+                throw new FnosApiException("no files");
             }
             return files;
         }
