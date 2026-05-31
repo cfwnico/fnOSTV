@@ -25,7 +25,7 @@ import com.fnostv.android4.media.MediaLibraryStore;
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosFileList;
 import com.fnostv.android4.net.FnosRestClient;
-import com.fnostv.android4.net.FnosRpcException;
+import com.fnostv.android4.net.FnosApiException;
 import com.fnostv.android4.net.FnosSettingsSummary;
 import com.fnostv.android4.ui.NativeSettingsView;
 import com.fnostv.android4.ui.SettingsCompletionFlow;
@@ -246,7 +246,7 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
                             refreshNativeSettings("");
                         }
                     });
-                } catch (FnosRpcException ex) {
+                } catch (FnosApiException ex) {
                     Logger.w("Settings summary load failed: " + ex.getMessage());
                     runOnUiThread(new Runnable() {
                         @Override
@@ -349,7 +349,7 @@ public final class SettingsActivity extends Activity implements SettingsForm.Lis
             mediaIndexStore.replaceAll(entries);
             markLibrariesScanned(libraries);
             return ScanResult.success(entries.size());
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             Logger.w("REST media library scan failed: " + ex.getMessage());
             return ScanResult.failure("REST media sync failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
