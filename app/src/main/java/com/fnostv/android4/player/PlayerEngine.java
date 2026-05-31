@@ -31,7 +31,7 @@ public interface PlayerEngine {
 
     void detachSurface();
 
-    void prepare(String url, PlaybackOptions options) throws Exception;
+    void prepare(String url, String authorizationToken, PlaybackOptions options) throws Exception;
 
     void start();
 

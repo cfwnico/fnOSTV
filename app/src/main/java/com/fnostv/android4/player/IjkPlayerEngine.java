@@ -2,6 +2,8 @@ package com.fnostv.android4.player;
 
 import android.view.SurfaceHolder;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.lang.reflect.Method;
 
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -46,7 +48,7 @@ public final class IjkPlayerEngine implements PlayerEngine {
     }
 
     @Override
-    public void prepare(String url, PlaybackOptions options) throws Exception {
+    public void prepare(String url, String authorizationToken, PlaybackOptions options) throws Exception {
         ensureLoaded();
         player = new IjkMediaPlayer();
         configurePlayer(player, options);
@@ -82,7 +84,13 @@ public final class IjkPlayerEngine implements PlayerEngine {
                 return false;
             }
         });
-        player.setDataSource(url);
+        if (authorizationToken != null && authorizationToken.length() > 0) {
+            Map<String, String> headers = new HashMap<String, String>();
+            headers.put("Authorization", authorizationToken);
+            player.setDataSource(url, headers);
+        } else {
+            player.setDataSource(url);
+        }
         player.prepareAsync();
     }
 

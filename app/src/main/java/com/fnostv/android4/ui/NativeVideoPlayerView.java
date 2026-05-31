@@ -508,7 +508,7 @@ public final class NativeVideoPlayerView {
             prepareStartedAtMs = System.currentTimeMillis();
             showHint("正在启动 " + player.name() + " · " + playbackStatusLabel());
             updateControlText();
-            player.prepare(currentUrl, playbackOptions);
+            player.prepare(currentUrl, currentSource().authorizationToken, playbackOptions);
             Logger.d(player.name() + " preparing file=" + fileName() + " format=" + formatLabel()
                     + " hw=" + preferHardwareCodec
                     + " options=" + optionsLabel()

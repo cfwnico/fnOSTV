@@ -78,7 +78,7 @@ public final class VlcPlayerEngine implements PlayerEngine {
     }
 
     @Override
-    public void prepare(String url, PlaybackOptions playbackOptions) {
+    public void prepare(String url, String authorizationToken, PlaybackOptions playbackOptions) {
         PlaybackOptions playback = playbackOptions == null ? PlaybackOptions.forUrl(url, true) : playbackOptions;
         ArrayList<String> vlcOptions = new ArrayList<String>();
         vlcOptions.add("--network-caching=" + playback.networkCachingMs);
@@ -132,6 +132,9 @@ public final class VlcPlayerEngine implements PlayerEngine {
             media.addOption(":avcodec-skiploopfilter=" + playback.loopFilterSkip);
         }
         media.addOption(":http-reconnect");
+        if (authorizationToken != null && authorizationToken.length() > 0) {
+            media.addOption(":http-header=Authorization: " + authorizationToken);
+        }
         player.setMedia(media);
         media.release();
         player.play();
