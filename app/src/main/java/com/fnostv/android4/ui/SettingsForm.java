@@ -27,7 +27,7 @@ public final class SettingsForm {
     private EditText urlInput;
     private EditText usernameInput;
     private EditText passwordInput;
-    private CheckBox autoLoginInput;
+    private CheckBox httpsInput;
     private CheckBox trustSslInput;
 
     public SettingsForm(Context context, Listener listener) {
@@ -87,7 +87,7 @@ public final class SettingsForm {
             panel.addView(error, rowParams(0, 14));
         }
 
-        urlInput = input("服务器地址，例如 http://192.168.1.20:5666", false);
+        urlInput = input("服务器地址，例如 192.168.1.20:5666 或 https://nas.example.com", false);
         urlInput.setText(profile.baseUrl);
         panel.addView(urlInput, rowParams(0, 12));
 
@@ -102,8 +102,8 @@ public final class SettingsForm {
         LinearLayout options = new LinearLayout(context);
         options.setOrientation(LinearLayout.HORIZONTAL);
         options.setGravity(Gravity.CENTER_VERTICAL);
-        autoLoginInput = checkbox("保持登录", profile.autoLogin);
-        options.addView(autoLoginInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        httpsInput = checkbox("使用 HTTPS", profile.useHttps);
+        options.addView(httpsInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         trustSslInput = checkbox("信任 SSL 异常", profile.trustSslErrors);
         options.addView(trustSslInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         panel.addView(options, rowParams(0, 20));
@@ -145,8 +145,8 @@ public final class SettingsForm {
                 urlInput.getText().toString(),
                 usernameInput.getText().toString(),
                 passwordInput.getText().toString(),
-                autoLoginInput.isChecked(),
-                trustSslInput.isChecked());
+                trustSslInput.isChecked(),
+                httpsInput.isChecked());
     }
 
     private EditText input(String hint, boolean password) {

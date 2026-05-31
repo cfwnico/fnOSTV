@@ -12,6 +12,6 @@ public final class SettingsCompletionFlow {
         if (!accountEditorOpen || !profileReady) {
             return ACTION_KEEP_ACCOUNT_EDITOR;
         }
-        return firstConfiguration ? ACTION_FINISH : ACTION_SHOW_NATIVE_SETTINGS;
+        return ACTION_FINISH;
     }
 }

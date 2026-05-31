@@ -56,7 +56,7 @@ public final class NativeSettingsView {
     private List<MediaLibrary> libraries;
     private FnosSettingsSummary summary = FnosSettingsSummary.empty();
     private String status = "";
-    private String page = PAGE_APPEARANCE;
+    private String page = PAGE_LIBRARY;
 
     public NativeSettingsView(Context context, Listener listener) {
         this.context = context;

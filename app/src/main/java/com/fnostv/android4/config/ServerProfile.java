@@ -8,19 +8,23 @@ public final class ServerProfile {
     public final String baseUrl;
     public final String username;
     public final String password;
-    public final boolean autoLogin;
     public final boolean trustSslErrors;
+    public final boolean useHttps;
 
-    public ServerProfile(String baseUrl, String username, String password, boolean autoLogin, boolean trustSslErrors) {
-        this(1, baseUrl, username, password, autoLogin, trustSslErrors);
+    public ServerProfile(String baseUrl, String username, String password, boolean trustSslErrors) {
+        this(1, baseUrl, username, password, trustSslErrors, false);
     }
 
-    private ServerProfile(int schemaVersion, String baseUrl, String username, String password, boolean autoLogin, boolean trustSslErrors) {
+    public ServerProfile(String baseUrl, String username, String password, boolean trustSslErrors, boolean useHttps) {
+        this(1, baseUrl, username, password, trustSslErrors, useHttps);
+    }
+
+    private ServerProfile(int schemaVersion, String baseUrl, String username, String password, boolean trustSslErrors, boolean useHttps) {
         this.schemaVersion = schemaVersion;
-        this.baseUrl = normalizeBaseUrl(baseUrl);
+        this.useHttps = useHttps;
+        this.baseUrl = normalizeBaseUrl(baseUrl, useHttps);
         this.username = username == null ? "" : username.trim();
         this.password = password == null ? "" : password;
-        this.autoLogin = autoLogin;
         this.trustSslErrors = trustSslErrors;
     }
 
@@ -34,8 +38,8 @@ public final class ServerProfile {
         object.put("baseUrl", baseUrl);
         object.put("username", username);
         object.put("password", password);
-        object.put("autoLogin", autoLogin);
         object.put("trustSslErrors", trustSslErrors);
+        object.put("useHttps", useHttps);
         return object;
     }
 
@@ -50,18 +54,18 @@ public final class ServerProfile {
                     object.optString("baseUrl"),
                     object.optString("username"),
                     object.optString("password"),
-                    object.optBoolean("autoLogin", true),
-                    object.optBoolean("trustSslErrors", false));
+                    object.optBoolean("trustSslErrors", false),
+                    object.optBoolean("useHttps", false));
         } catch (JSONException ignored) {
             return empty();
         }
     }
 
     public static ServerProfile empty() {
-        return new ServerProfile("", "", "", true, false);
+        return new ServerProfile("", "", "", false, false);
     }
 
-    private static String normalizeBaseUrl(String raw) {
+    private static String normalizeBaseUrl(String raw, boolean useHttps) {
         if (raw == null) {
             return "";
         }
@@ -70,7 +74,7 @@ public final class ServerProfile {
             return "";
         }
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            url = "http://" + url;
+            url = (useHttps ? "https://" : "http://") + url;
         }
         int authorityEnd = firstIndexOf(url, new char[]{'/', '?', '#'}, url.indexOf("://") + 3);
         if (authorityEnd > 0) {
