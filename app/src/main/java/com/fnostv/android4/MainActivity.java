@@ -38,7 +38,7 @@ import com.fnostv.android4.net.FnosFileList;
 import com.fnostv.android4.net.FnosMediaCounts;
 import com.fnostv.android4.net.FnosPlaybackSource;
 import com.fnostv.android4.net.FnosRestClient;
-import com.fnostv.android4.net.FnosRpcException;
+import com.fnostv.android4.net.FnosApiException;
 import com.fnostv.android4.net.MediaDetailInfo;
 import com.fnostv.android4.net.RecentPlaybackStore;
 import com.fnostv.android4.tv.BackNavigationState;
@@ -58,7 +58,7 @@ import com.fnostv.android4.web.FnosChromeClient;
 import com.fnostv.android4.web.FnosDownloadListener;
 import com.fnostv.android4.web.FnosWebViewClient;
 import com.fnostv.android4.web.FullscreenVideoController;
-import com.fnostv.android4.web.LoginScript;
+
 import com.fnostv.android4.web.WebViewConfigurator;
 import com.fnostv.android4.web.WebViewEvents;
 
@@ -91,6 +91,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private boolean settingsOpen;
     private boolean nativeAuthRunning;
     private String currentFilePath = "";
+    private long lastBackPressTime;
     private int browserMode = BROWSER_MODE_FILES;
     private MediaDetailState mediaDetailState;
     private final Handler loadTimeoutHandler = new Handler();
@@ -267,6 +268,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                     public void run() {
                         nativeAuthRunning = false;
                         if (result.success) {
+                            nativeHomeView.setPosterAuthorizationToken(result.token);
+                            fileBrowserView.setPosterAuthorizationToken(result.token);
+                            mediaDetailView.setPosterAuthorizationToken(result.token);
                             showNativeHome();
                         } else {
                             handleServerConnectionFailure(result.message);
@@ -281,12 +285,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             FnosRestClient client = newRestClient();
             String token = client.authenticate();
-            nativeHomeView.setPosterAuthorizationToken(token);
-            fileBrowserView.setPosterAuthorizationToken(token);
-            mediaDetailView.setPosterAuthorizationToken(token);
             Logger.d("Native REST login succeeded");
-            return NativeAuthResult.success();
-        } catch (FnosRpcException ex) {
+            return NativeAuthResult.success(token);
+        } catch (FnosApiException ex) {
             Logger.w("Native REST login failed: " + ex.getMessage());
             return NativeAuthResult.failure("REST login failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
@@ -546,7 +547,15 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             webView.goBack();
             return true;
         }
-        return false;
+        // On the home screen: double-back to exit with prompt
+        long now = System.currentTimeMillis();
+        if (now - lastBackPressTime < 2000) {
+            finish();
+            return true;
+        }
+        lastBackPressTime = now;
+        Toast.makeText(this, "再按一次退出应用", Toast.LENGTH_SHORT).show();
+        return true;
     }
 
     @Override
@@ -729,12 +738,12 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         return new MediaCenterGateway(
                 new MediaCenterGateway.RestProvider() {
                     @Override
-                    public FnosFileList libraries() throws FnosRpcException {
+                    public FnosFileList libraries() throws FnosApiException {
                         return newRestClient().mediaLibraries();
                     }
 
                     @Override
-                    public FnosFileList items(String path, String category, int pageSize) throws FnosRpcException {
+                    public FnosFileList items(String path, String category, int pageSize) throws FnosApiException {
                         return newRestClient().mediaItems(path, category, pageSize);
                     }
                 },
@@ -746,12 +755,12 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 },
                 new MediaCenterGateway.FileProvider() {
                     @Override
-                    public FnosFileList files(String path) throws FnosRpcException {
+                    public FnosFileList files(String path) throws FnosApiException {
                         FileLoadResult fallback = loadFileList(path);
                         if (fallback.success) {
                             return fallback.list;
                         }
-                        throw new FnosRpcException(fallback.message);
+                        throw new FnosApiException(fallback.message);
                     }
                 });
     }
@@ -760,7 +769,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             FnosFileList list = newRestClient().mediaItems("", category, 50);
             return MediaLoadResult.success(title, list.entries.size() == 0 ? "暂无内容" : "fnOS 影视服务", list, false);
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             Logger.w("REST category failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
             Logger.w("REST category crashed: " + ex.getMessage());
@@ -773,7 +782,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             FnosFileList list = newRestClient().favoriteItems();
             return MediaLoadResult.success("收藏", list.entries.size() == 0 ? "暂无收藏" : "fnOS 收藏", list, false);
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             Logger.w("REST favorites failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
             Logger.w("REST favorites crashed: " + ex.getMessage());
@@ -786,7 +795,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             FnosFileList list = newRestClient().recentItems();
             return MediaLoadResult.success("继续观看", list.entries.size() == 0 ? "暂无播放记录" : "fnOS 继续观看", list, false);
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             Logger.w("REST recent failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
             Logger.w("REST recent crashed: " + ex.getMessage());
@@ -799,7 +808,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         try {
             FnosFileList list = newRestClient().mediaItems(restAncestor(path), NativeHomeView.ACTION_ALL, 50);
             return FileLoadResult.success(list);
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             Logger.w("REST file/media list failed: " + ex.getMessage());
             return FileLoadResult.failure("REST media list failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
@@ -816,9 +825,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         return value;
     }
 
-    private FnosRestClient newRestClient() throws FnosRpcException {
+    private FnosRestClient newRestClient() throws FnosApiException {
         if (profile == null || !profile.isReady()) {
-            throw new FnosRpcException("服务配置不可用");
+            throw new FnosApiException("Server profile is not ready");
         }
         return new FnosRestClient(profile);
     }
@@ -865,7 +874,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                             nativeHomeView.updatePosterSections(HomePosterSections.from(mediaEntries, recentList.entries, favoriteList.entries));
                         }
                     });
-                } catch (FnosRpcException ex) {
+                } catch (FnosApiException ex) {
                     Logger.w("REST home counts failed: " + ex.getMessage());
                 } catch (RuntimeException ex) {
                     Logger.w("REST home counts crashed: " + ex.getMessage());
@@ -874,7 +883,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         }, "fnos-rest-home-counts").start();
     }
 
-    private List<FnosFileEntry> loadHomeMediaEntries(FnosRestClient client) throws FnosRpcException {
+    private List<FnosFileEntry> loadHomeMediaEntries(FnosRestClient client) throws FnosApiException {
         FnosFileList libraries = client.mediaLibraries();
         if (libraries.entries.size() > 0) {
             FnosFileEntry first = libraries.entries.get(0);
@@ -1015,7 +1024,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 String error = "";
                 try {
                     loaded = newRestClient().mediaDetail(entry.path);
-                } catch (FnosRpcException ex) {
+                } catch (FnosApiException ex) {
                     Logger.w("Media detail metadata failed: " + ex.getMessage());
                     error = "详情信息暂不可用";
                 } catch (RuntimeException ex) {
@@ -1135,7 +1144,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 return PlaybackSourcesResult.success(sources);
             }
             return PlaybackSourcesResult.failure("REST did not return a playable URL");
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             Logger.w("REST playback sources failed: " + ex.getMessage());
             return PlaybackSourcesResult.failure("REST playback sources failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
@@ -1144,22 +1153,15 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         }
     }
 
-    private List<FnosPlaybackSource> restPlaybackSources(FnosFileEntry entry) throws FnosRpcException {
+    private List<FnosPlaybackSource> restPlaybackSources(FnosFileEntry entry) throws FnosApiException {
         List<FnosPlaybackSource> sources = new ArrayList<FnosPlaybackSource>();
         String direct = entry == null ? "" : entry.playbackUrl();
         if (direct.length() > 0) {
-            sources.add(new FnosPlaybackSource("??", direct));
+            sources.add(new FnosPlaybackSource("Original", direct));
             return sources;
         }
         if (canResolveDetailInfo(entry)) {
-            MediaDetailInfo detail = newRestClient().mediaDetail(entry.path);
-            for (int i = 0; i < detail.children.size(); i++) {
-                FnosFileEntry child = detail.children.get(i);
-                String url = child.playbackUrl();
-                if (url.length() > 0) {
-                    sources.add(new FnosPlaybackSource(child.name.length() == 0 ? "??" : child.name, url));
-                }
-            }
+            sources.addAll(newRestClient().playbackSources(entry.path));
         }
         return sources;
     }
@@ -1191,7 +1193,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                 return PlaybackResolveResult.success(sources.get(0).url);
             }
             return PlaybackResolveResult.failure("REST did not return a playable URL");
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             Logger.w("REST playback url failed: " + ex.getMessage());
             return PlaybackResolveResult.failure("REST playback URL failed: " + ex.getMessage());
         } catch (RuntimeException ex) {
@@ -1319,9 +1321,6 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private void markPageUsable(WebView view) {
         cancelLoadTimeout();
         CookieSyncManager.getInstance().sync();
-        if (profile.autoLogin && profile.username.length() > 0 && profile.password.length() > 0) {
-            view.loadUrl(LoginScript.build(profile));
-        }
     }
 
     @Override
@@ -1400,18 +1399,20 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
     private static final class NativeAuthResult {
         final boolean success;
         final String message;
+        final String token;
 
-        private NativeAuthResult(boolean success, String message) {
+        private NativeAuthResult(boolean success, String message, String token) {
             this.success = success;
             this.message = message;
+            this.token = token == null ? "" : token;
         }
 
-        static NativeAuthResult success() {
-            return new NativeAuthResult(true, "");
+        static NativeAuthResult success(String token) {
+            return new NativeAuthResult(true, "", token);
         }
 
         static NativeAuthResult failure(String message) {
-            return new NativeAuthResult(false, message);
+            return new NativeAuthResult(false, message, "");
         }
     }
 

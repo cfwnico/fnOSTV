@@ -2,7 +2,7 @@ package com.fnostv.android4.media;
 
 import com.fnostv.android4.net.FnosFileEntry;
 import com.fnostv.android4.net.FnosFileList;
-import com.fnostv.android4.net.FnosRpcException;
+import com.fnostv.android4.net.FnosApiException;
 import com.fnostv.android4.ui.FileBrowserLabels;
 import com.fnostv.android4.ui.NativeHomeView;
 
@@ -11,9 +11,9 @@ import java.util.List;
 
 public final class MediaCenterGateway {
     public interface RestProvider {
-        FnosFileList libraries() throws FnosRpcException;
+        FnosFileList libraries() throws FnosApiException;
 
-        FnosFileList items(String path, String category, int pageSize) throws FnosRpcException;
+        FnosFileList items(String path, String category, int pageSize) throws FnosApiException;
     }
 
     public interface LocalIndexProvider {
@@ -21,7 +21,7 @@ public final class MediaCenterGateway {
     }
 
     public interface FileProvider {
-        FnosFileList files(String path) throws FnosRpcException;
+        FnosFileList files(String path) throws FnosApiException;
     }
 
     private final RestProvider restProvider;
@@ -77,7 +77,7 @@ public final class MediaCenterGateway {
                 return MediaCenterLoad.success("\u5f71\u89c6\u5927\u5168", "fnOS \u5f71\u89c6\u6761\u76ee", all, false, MediaCenterLoad.SOURCE_REST_ITEMS);
             }
             trace.add("REST: empty");
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             trace.add("REST: " + ex.getMessage());
         } catch (RuntimeException ex) {
             trace.add("REST: " + ex.getMessage());
@@ -85,7 +85,7 @@ public final class MediaCenterGateway {
         return MediaCenterLoad.failure("");
     }
 
-    private MediaCenterLoad loadFirstRestLibraryWithEntries(FnosFileList libraries) throws FnosRpcException {
+    private MediaCenterLoad loadFirstRestLibraryWithEntries(FnosFileList libraries) throws FnosApiException {
         for (int i = 0; i < libraries.entries.size(); i++) {
             FnosFileEntry library = libraries.entries.get(i);
             if (library == null || library.path.length() == 0) {
@@ -115,7 +115,7 @@ public final class MediaCenterGateway {
                 return MediaCenterLoad.success("\u5f71\u89c6\u5927\u5168", path, list, false, MediaCenterLoad.SOURCE_REST_ITEMS);
             }
             trace.add("REST: empty child");
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             trace.add("REST: " + ex.getMessage());
         } catch (RuntimeException ex) {
             trace.add("REST: " + ex.getMessage());
@@ -152,7 +152,7 @@ public final class MediaCenterGateway {
                     list,
                     true,
                     MediaCenterLoad.SOURCE_FILE_FALLBACK);
-        } catch (FnosRpcException ex) {
+        } catch (FnosApiException ex) {
             trace.add("\u6587\u4ef6: " + ex.getMessage());
         } catch (RuntimeException ex) {
             trace.add("\u6587\u4ef6: " + ex.getMessage());
