@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <!-- Background -->
+    <path
+        android:fillColor="#151A21"
+        android:pathData="M0,0h100v100h-100z" />
+    <!-- Arc ring: pie slice minus center circle -->
+    <path
+        android:fillColor="#2F86F6"
+        android:pathData="M47,59 L32.45,86.37 A31,31 0 1,1 66.93,82.75 Z" />
+    <!-- Inner dark circle (cuts center of pie to leave ring) -->
+    <path
+        android:fillColor="#151A21"
+        android:pathData="M46,58 m-13,0 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0" />
+    <!-- Left fin -->
+    <path
+        android:fillColor="#2F86F6"
+        android:pathData="M48,12 L66,12 L56,34 L38,34 Z" />
+    <!-- Right fin -->
+    <path
+        android:fillColor="#2F86F6"
+        android:pathData="M74,12 L92,12 L80,34 L62,34 Z" />
+</vector>
