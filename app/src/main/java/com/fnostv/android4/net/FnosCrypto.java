@@ -84,4 +84,39 @@ final class FnosCrypto {
             throw new FnosRpcException("请求签名失败", ex);
         }
     }
+
+    static String md5Hex(String value) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] array = md.digest(value.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < array.length; ++i) {
+                sb.append(Integer.toHexString((array[i] & 0xFF) | 0x100).substring(1,3));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    static String generateAuthx(String method, String urlPath, String body, String token) {
+        String secret = "NDzZTVxnRKP8Z0jXg1VAMonaG8akvh";
+        String s = String.valueOf((long)(Math.random() * 900000) + 100000);
+        String c = String.valueOf(System.currentTimeMillis());
+        
+        boolean isGet = "GET".equalsIgnoreCase(method);
+        String a = "";
+        if (!isGet && body != null && body.length() > 0) {
+            a = body;
+        }
+        
+        String o = a.length() == 0 ? "" : md5Hex(a);
+        String t = token == null ? "" : token;
+        
+        // Ensure path parsing logic matches Web UI
+        // Typical pu(e.url) returns the relative path, let's assume it passes the correct urlPath
+        String l = secret + "_" + urlPath + "_" + s + "_" + c + "_" + o + "_" + t;
+        
+        return "nonce=" + s + "&timestamp=" + c + "&sign=" + md5Hex(l);
+    }
 }
