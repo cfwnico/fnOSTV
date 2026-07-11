@@ -832,9 +832,9 @@ public final class NativeVideoPlayerView {
             @Override
             public void run() {
                 try {
-                    com.fnostv.android4.net.FnosSession session = com.fnostv.android4.net.FnosSessionStore.get(getContext()).load();
+                    com.fnostv.android4.net.FnosSession session = new com.fnostv.android4.net.FnosSessionStore(getContext()).load();
                     if (session.hasToken()) {
-                        com.fnostv.android4.config.ServerProfile profile = com.fnostv.android4.config.ServerProfileStore.get(getContext()).loadActive();
+                        com.fnostv.android4.config.ServerProfile profile = new com.fnostv.android4.config.ProfileStore(getContext()).load();
                         com.fnostv.android4.net.FnosRestClient client = new com.fnostv.android4.net.FnosRestClient(profile);
                         client.reportPlaybackProgress(session, currentEntry, mediaGuid, position / 1000);
                     }
