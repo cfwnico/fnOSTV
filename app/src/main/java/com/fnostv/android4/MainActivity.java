@@ -1160,6 +1160,16 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             if (!session.hasToken()) {
                 return PlaybackSourcesResult.failure("登录会话已失效");
             }
+            if (entry.type != null && entry.type.startsWith("video/rest/") && !entry.path.startsWith("/")) {
+                com.fnostv.android4.net.FnosRestClient restClient = new com.fnostv.android4.net.FnosRestClient(profile);
+                com.fnostv.android4.net.PlaybackSourcesResult.Source source = restClient.resolveRestPlaybackSource(session, entry);
+                if (source != null) {
+                    java.util.List<com.fnostv.android4.net.PlaybackSourcesResult.Source> list = new java.util.ArrayList<com.fnostv.android4.net.PlaybackSourcesResult.Source>();
+                    list.add(source);
+                    return PlaybackSourcesResult.success(list);
+                }
+                return PlaybackSourcesResult.failure("无法从影视库获取视频流。");
+            }
             FnosRpcClient client = new FnosRpcClient(profile, sessionStore.getOrCreateDeviceId());
             return PlaybackSourcesResult.success(client.playbackSources(session, entry));
         } catch (FnosRpcException ex) {

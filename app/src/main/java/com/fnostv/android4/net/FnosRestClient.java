@@ -111,6 +111,33 @@ public final class FnosRestClient {
         return token == null ? "" : token;
     }
 
+    public com.fnostv.android4.net.PlaybackSourcesResult.Source resolveRestPlaybackSource(FnosSession session, FnosFileEntry entry) throws FnosRpcException {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("item_guid", entry.path);
+            
+            JSONObject response = post("/play/info", body.toString());
+            if (response.getInt("code") == 0) {
+                JSONObject data = response.getJSONObject("data");
+                String mediaGuid = data.getString("media_guid");
+                
+                String url = profile.endpoint + "/v/api/v1/media/range/" + mediaGuid;
+                java.util.Map<String, String> headers = new java.util.HashMap<String, String>();
+                headers.put("Authorization", session.accessToken);
+                
+                // Need to generate Authx for the GET request
+                String authx = FnosCrypto.generateAuthx("GET", "/v/api/v1/media/range/" + mediaGuid, "");
+                headers.put("Authx", authx);
+                headers.put("Cookie", "Trim-MC-token=" + session.accessToken);
+                
+                return new com.fnostv.android4.net.PlaybackSourcesResult.Source(url, "video/mp4", headers);
+            }
+        } catch (JSONException ex) {
+            throw new FnosRpcException("解析影视详情信息失败", ex);
+        }
+        return null;
+    }
+
     public JSONObject runningTasks() throws FnosRpcException {
         return get("/task/running");
     }
