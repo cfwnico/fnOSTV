@@ -1162,9 +1162,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
             }
             if (entry.type != null && entry.type.startsWith("video/rest/") && !entry.path.startsWith("/")) {
                 com.fnostv.android4.net.FnosRestClient restClient = new com.fnostv.android4.net.FnosRestClient(profile);
-                com.fnostv.android4.net.PlaybackSourcesResult.Source source = restClient.resolveRestPlaybackSource(session, entry);
+                FnosPlaybackSource source = restClient.resolveRestPlaybackSource(session, entry);
                 if (source != null) {
-                    java.util.List<com.fnostv.android4.net.PlaybackSourcesResult.Source> list = new java.util.ArrayList<com.fnostv.android4.net.PlaybackSourcesResult.Source>();
+                    java.util.List<FnosPlaybackSource> list = new java.util.ArrayList<FnosPlaybackSource>();
                     list.add(source);
                     return PlaybackSourcesResult.success(list);
                 }
