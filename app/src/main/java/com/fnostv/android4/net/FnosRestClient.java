@@ -121,14 +121,14 @@ public final class FnosRestClient {
                 JSONObject data = response.getJSONObject("data");
                 String mediaGuid = data.getString("media_guid");
                 
-                String url = profile.endpoint + "/v/api/v1/media/range/" + mediaGuid;
+                String url = profile.baseUrl + "/v/api/v1/media/range/" + mediaGuid;
                 java.util.Map<String, String> headers = new java.util.HashMap<String, String>();
-                headers.put("Authorization", session.accessToken);
+                headers.put("Authorization", session.token);
                 
                 // Need to generate Authx for the GET request
                 String authx = FnosCrypto.generateAuthx("GET", "/v/api/v1/media/range/" + mediaGuid, "");
                 headers.put("Authx", authx);
-                headers.put("Cookie", "Trim-MC-token=" + session.accessToken);
+                headers.put("Cookie", "Trim-MC-token=" + session.token);
                 
                 return new com.fnostv.android4.net.PlaybackSourcesResult.Source(url, "video/mp4", headers);
             }

@@ -6,7 +6,7 @@ import io
 repo = "cfwnico/fnOSTV"
 url = f"https://api.github.com/repos/{repo}/actions/runs?per_page=1"
 
-req = urllib.request.Request(url)
+req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
 try:
     with urllib.request.urlopen(req) as resp:
         data = json.loads(resp.read().decode('utf-8'))
@@ -15,8 +15,7 @@ try:
         
         # get logs url
         logs_url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/logs"
-        req_logs = urllib.request.Request(logs_url)
-        # Note: the logs are a zip file, and usually github requires auth for logs!
+        req_logs = urllib.request.Request(logs_url, headers={'User-Agent': 'Mozilla/5.0'})
         try:
             with urllib.request.urlopen(req_logs) as resp_logs:
                 with zipfile.ZipFile(io.BytesIO(resp_logs.read())) as z:
@@ -25,7 +24,7 @@ try:
                             print(f"--- {filename} ---")
                             print(z.read(filename).decode('utf-8')[-2000:])
         except urllib.error.HTTPError as e:
-            print(f"Failed to fetch logs, might need auth. {e}")
+            print(f"Failed to fetch logs. {e}")
             
 except Exception as e:
     print(f"Error: {e}")
