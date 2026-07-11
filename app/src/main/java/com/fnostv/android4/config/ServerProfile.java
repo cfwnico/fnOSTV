@@ -75,6 +75,14 @@ public final class ServerProfile {
         while (url.endsWith("/")) {
             url = url.substring(0, url.length() - 1);
         }
+        // Strip any path component (e.g. /v) — the API path is hardcoded
+        // in FnosRestClient.apiUrl() as /v/api/v1. Keeping a path suffix
+        // like /v causes double /v/v/api/v1/… → server returns HTML
+        // instead of JSON → 影视 REST 响应解析失败.
+        int pathStart = url.indexOf('/', 8); // skip past http(s)://
+        if (pathStart > 0) {
+            url = url.substring(0, pathStart);
+        }
         return url;
     }
 }
