@@ -215,7 +215,7 @@ public final class FnosRestClient {
     private JSONObject get(String path) throws FnosRpcException {
         ensureToken();
         String urlPath = "/v/api/v1" + (path.startsWith("/") ? path : "/" + path);
-        String authx = FnosCrypto.generateAuthx("GET", urlPath, "", token);
+        String authx = FnosCrypto.generateAuthx("GET", urlPath, "");
         Request request = new Request.Builder()
                 .url(apiUrl(path))
                 .header("Authorization", token)
@@ -228,7 +228,7 @@ public final class FnosRestClient {
     private JSONObject post(String path, String body) throws FnosRpcException {
         ensureToken();
         String urlPath = "/v/api/v1" + (path.startsWith("/") ? path : "/" + path);
-        String authx = FnosCrypto.generateAuthx("POST", urlPath, body, token);
+        String authx = FnosCrypto.generateAuthx("POST", urlPath, body);
         Request request = new Request.Builder()
                 .url(apiUrl(path))
                 .header("Authorization", token)

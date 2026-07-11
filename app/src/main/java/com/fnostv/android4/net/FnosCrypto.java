@@ -99,7 +99,7 @@ final class FnosCrypto {
         }
     }
 
-    static String generateAuthx(String method, String urlPath, String body, String token) {
+    static String generateAuthx(String method, String urlPath, String body) {
         String secret = "NDzZTVxnRKP8Z0jXg1VAMonaG8akvh";
         String s = String.valueOf((long)(Math.random() * 900000) + 100000);
         String c = String.valueOf(System.currentTimeMillis());
@@ -110,11 +110,9 @@ final class FnosCrypto {
             a = body;
         }
         
-        String o = a.length() == 0 ? "" : md5Hex(a);
-        String t = token == null ? "" : token;
+        String o = md5Hex(a); // In JS, mu("") and hu("") both return hash of empty string which is d41d...
+        String t = "16CCEB3D-AB42-077D-36A1-F355324E4237"; // Extracted hardcoded apiKey from frontend
         
-        // Ensure path parsing logic matches Web UI
-        // Typical pu(e.url) returns the relative path, let's assume it passes the correct urlPath
         String l = secret + "_" + urlPath + "_" + s + "_" + c + "_" + o + "_" + t;
         
         return "nonce=" + s + "&timestamp=" + c + "&sign=" + md5Hex(l);
