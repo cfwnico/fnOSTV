@@ -22,17 +22,24 @@ jobs:
           java-version: '11'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-28 build-tools;28.0.3 platform-tools'
-
-      - name: Cache Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '6.7.1'
+        run: |
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          curl -sL -o tools.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -qo tools.zip
+          mv cmdline-tools latest 2>/dev/null || true
+          ls -la latest/bin/
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME --licenses
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-28" "build-tools;28.0.3"
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
 
       - name: Build Debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
