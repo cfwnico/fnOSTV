@@ -55,6 +55,7 @@ public final class NativeVideoPlayerView {
     private FrameLayout view;
     private PlaybackSurfaceView videoView;
     private ProgressBar loadingView;
+    private long lastSyncTimeMs = 0;
     private TextView titleView;
     private LinearLayout controlBar;
     private SeekBar seekBar;
@@ -284,6 +285,7 @@ public final class NativeVideoPlayerView {
         if (playbackSources.size() == 0) {
             playbackSources.add(new FnosPlaybackSource("原画", ""));
         }
+        lastSyncTimeMs = 0;
         sourceIndex = 0;
         currentUrl = currentSource().url;
         playbackOptions = buildPlaybackOptions(currentUrl);
@@ -810,6 +812,35 @@ public final class NativeVideoPlayerView {
         }
         updateTimeLabel(position, duration);
         updateControlText();
+        syncPlaybackProgress(position, duration);
+    }
+
+    private void syncPlaybackProgress(final int position, final int duration) {
+        if (currentEntry == null || currentUrl == null || duration <= 0) return;
+        long now = System.currentTimeMillis();
+        if (now - lastSyncTimeMs < 10000 && lastSyncTimeMs != 0) return; // Sync every 10s
+        lastSyncTimeMs = now;
+        
+        final String mediaGuid;
+        if (currentUrl.contains("/v/api/v1/media/range/")) {
+            mediaGuid = currentUrl.substring(currentUrl.lastIndexOf("/") + 1);
+        } else {
+            return; // We only know how to sync for REST video right now
+        }
+        
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    com.fnostv.android4.net.FnosSession session = com.fnostv.android4.net.FnosSessionStore.get(getContext()).load();
+                    if (session.hasToken()) {
+                        com.fnostv.android4.config.ServerProfile profile = com.fnostv.android4.config.ServerProfileStore.get(getContext()).loadActive();
+                        com.fnostv.android4.net.FnosRestClient client = new com.fnostv.android4.net.FnosRestClient(profile);
+                        client.reportPlaybackProgress(session, currentEntry, mediaGuid, position / 1000);
+                    }
+                } catch (Exception e) {}
+            }
+        }).start();
     }
 
     private void updateTimeLabel(int position, int duration) {

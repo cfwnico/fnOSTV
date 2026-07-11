@@ -138,6 +138,18 @@ public final class FnosRestClient {
         return null;
     }
 
+    public void reportPlaybackProgress(FnosSession session, FnosFileEntry entry, String mediaGuid, int positionSec) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("item_guid", entry.path);
+            body.put("media_guid", mediaGuid);
+            body.put("ts", positionSec);
+            post("/play/record", body.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public JSONObject runningTasks() throws FnosRpcException {
         return get("/task/running");
     }
