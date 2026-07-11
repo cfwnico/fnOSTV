@@ -753,8 +753,8 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
                     }
 
                     @Override
-                    public FnosFileList items(String path, String category, int pageSize) throws FnosRpcException {
-                        return newRestClient().mediaItems(path, category, pageSize);
+                    public FnosFileList items(String path, String category, int pageSize, boolean isAncestor) throws FnosRpcException {
+                        return newRestClient().mediaItems(path, category, pageSize, isAncestor);
                     }
                 },
                 new MediaCenterGateway.LocalIndexProvider() {

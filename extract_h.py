@@ -1,0 +1,8 @@
+import re
+
+with open("e:/FNOSTVKai/target.js", "r", encoding="utf-8") as f:
+    text = f.read()
+
+idx = text.find("_h=(")
+if idx != -1:
+    print(text[idx:idx+200])

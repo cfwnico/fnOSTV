@@ -53,9 +53,9 @@ public final class FnosRestClient {
         }
     }
 
-    public FnosFileList mediaItems(String ancestorGuid, String category, int pageSize) throws FnosRpcException {
+    public FnosFileList mediaItems(String guid, String category, int pageSize, boolean isAncestor) throws FnosRpcException {
         try {
-            return parseMediaItems(ancestorGuid, post("/item/list", mediaItemPayload(ancestorGuid, category, pageSize)));
+            return parseMediaItems(guid, post("/item/list", mediaItemPayload(guid, category, pageSize, isAncestor)));
         } catch (JSONException ex) {
             throw new FnosRpcException("解析影视条目失败", ex);
         }
@@ -127,10 +127,14 @@ public final class FnosRestClient {
         return dataArray(get("/server/gpu/list"));
     }
 
-    public static String mediaItemPayload(String ancestorGuid, String category, int pageSize) throws JSONException {
+    public static String mediaItemPayload(String guid, String category, int pageSize, boolean isAncestor) throws JSONException {
         JSONObject body = new JSONObject();
-        if (ancestorGuid != null && ancestorGuid.length() > 0) {
-            body.put("ancestor_guid", ancestorGuid);
+        if (guid != null && guid.length() > 0) {
+            if (isAncestor) {
+                body.put("ancestor_guid", guid);
+            } else {
+                body.put("parent_guid", guid);
+            }
         }
         JSONObject tags = new JSONObject();
         tags.put("type", typeArray(category));
@@ -215,7 +219,13 @@ public final class FnosRestClient {
     private JSONObject get(String path) throws FnosRpcException {
         ensureToken();
         String urlPath = "/v/api/v1" + (path.startsWith("/") ? path : "/" + path);
-        String authx = FnosCrypto.generateAuthx("GET", urlPath, "");
+        String query = "";
+        int qIdx = urlPath.indexOf('?');
+        if (qIdx >= 0) {
+            query = urlPath.substring(qIdx + 1);
+            urlPath = urlPath.substring(0, qIdx);
+        }
+        String authx = FnosCrypto.generateAuthx("GET", urlPath, query);
         Request request = new Request.Builder()
                 .url(apiUrl(path))
                 .header("Authorization", token)

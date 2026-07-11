@@ -99,15 +99,33 @@ final class FnosCrypto {
         }
     }
 
-    static String generateAuthx(String method, String urlPath, String body) {
+    static String generateAuthx(String method, String urlPath, String bodyOrQuery) {
         String secret = "NDzZTVxnRKP8Z0jXg1VAMonaG8akvh";
         String s = String.valueOf((long)(Math.random() * 900000) + 100000);
         String c = String.valueOf(System.currentTimeMillis());
         
         boolean isGet = "GET".equalsIgnoreCase(method);
         String a = "";
-        if (!isGet && body != null && body.length() > 0) {
-            a = body;
+        if (!isGet && bodyOrQuery != null && bodyOrQuery.length() > 0) {
+            a = bodyOrQuery;
+        } else if (isGet && bodyOrQuery != null && bodyOrQuery.length() > 0) {
+            String[] pairs = bodyOrQuery.split("&");
+            java.util.Arrays.sort(pairs);
+            StringBuilder sb = new StringBuilder();
+            try {
+                for (int i = 0; i < pairs.length; i++) {
+                    String[] kv = pairs[i].split("=");
+                    if (kv.length == 2) {
+                        if (i > 0) sb.append("&");
+                        sb.append(java.net.URLEncoder.encode(java.net.URLDecoder.decode(kv[0], "UTF-8"), "UTF-8"));
+                        sb.append("=");
+                        sb.append(java.net.URLEncoder.encode(java.net.URLDecoder.decode(kv[1], "UTF-8"), "UTF-8"));
+                    }
+                }
+                a = sb.toString();
+            } catch (Exception e) {
+                a = "";
+            }
         }
         
         String o = md5Hex(a); // In JS, mu("") and hu("") both return hash of empty string which is d41d...

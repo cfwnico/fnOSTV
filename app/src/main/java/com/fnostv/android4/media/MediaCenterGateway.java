@@ -13,7 +13,7 @@ public final class MediaCenterGateway {
     public interface RestProvider {
         FnosFileList libraries() throws FnosRpcException;
 
-        FnosFileList items(String path, String category, int pageSize) throws FnosRpcException;
+        FnosFileList items(String path, String category, int pageSize, boolean isAncestor) throws FnosRpcException;
     }
 
     public interface LocalIndexProvider {
@@ -77,18 +77,14 @@ public final class MediaCenterGateway {
         try {
             FnosFileList libraries = restProvider.libraries();
             if (hasEntries(libraries)) {
-                FnosFileEntry first = libraries.entries.get(0);
-                FnosFileList list = restProvider.items(first.path, NativeHomeView.ACTION_ALL, 50);
-                if (hasEntries(list)) {
-                    return MediaCenterLoad.success(
-                            first.name.length() == 0 ? "影视大全" : first.name,
-                            "fnOS 影视媒体库",
-                            list,
-                            false,
-                            MediaCenterLoad.SOURCE_REST_LIBRARY);
-                }
+                return MediaCenterLoad.success(
+                        "媒体库",
+                        "fnOS 影视媒体库",
+                        libraries,
+                        false,
+                        MediaCenterLoad.SOURCE_REST_LIBRARY);
             }
-            FnosFileList all = restProvider.items("", NativeHomeView.ACTION_ALL, 50);
+            FnosFileList all = restProvider.items("", NativeHomeView.ACTION_ALL, 50, true);
             if (hasEntries(all)) {
                 return MediaCenterLoad.success("影视大全", "fnOS 影视条目", all, false, MediaCenterLoad.SOURCE_REST_ITEMS);
             }
@@ -107,7 +103,7 @@ public final class MediaCenterGateway {
             return MediaCenterLoad.failure("");
         }
         try {
-            FnosFileList list = restProvider.items(path, NativeHomeView.ACTION_ALL, 50);
+            FnosFileList list = restProvider.items(path, NativeHomeView.ACTION_ALL, 50, false);
             if (list != null) {
                 return MediaCenterLoad.success("影视大全", path, list, false, MediaCenterLoad.SOURCE_REST_ITEMS);
             }

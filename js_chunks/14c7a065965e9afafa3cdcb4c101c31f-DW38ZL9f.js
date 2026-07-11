@@ -1,0 +1,1 @@
+import{E as e,y as t}from"./bcae0416621b3db43d8cba1e4454a792-DEtZcP_t.js";import{a as n}from"./14a77ac952fc83b785b65592c335e16d-YegjoWFd.js";import{t as r}from"./d26eae87829adde551bf4b852f9da6b8-CRSulW5X.js";var i=e(t(),1),a=({children:e})=>{let{user:t}=n();return t?t.is_admin?e:(0,i.jsx)(r,{}):null};export{a as t};
