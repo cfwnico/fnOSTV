@@ -788,7 +788,7 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
 
     private MediaLoadResult loadCategory(String title, String category) {
         try {
-            FnosFileList list = newRestClient().mediaItems("", category, 50);
+            FnosFileList list = newRestClient().mediaItems("", category, 50, false);
             return MediaLoadResult.success(title, list.entries.size() == 0 ? "暂无内容" : "fnOS 影视服务", list, false);
         } catch (FnosRpcException ex) {
             Logger.w("REST category failed: " + ex.getMessage());
@@ -904,9 +904,9 @@ public final class MainActivity extends Activity implements WebViewEvents, Remot
         FnosFileList libraries = client.mediaLibraries();
         if (libraries.entries.size() > 0) {
             FnosFileEntry first = libraries.entries.get(0);
-            return client.mediaItems(first.path, NativeHomeView.ACTION_ALL, 12).entries;
+            return client.mediaItems(first.path, NativeHomeView.ACTION_ALL, 12, false).entries;
         }
-        return client.mediaItems("", NativeHomeView.ACTION_ALL, 12).entries;
+        return client.mediaItems("", NativeHomeView.ACTION_ALL, 12, false).entries;
     }
 
     private List<FnosFileEntry> knownMediaEntries() {
